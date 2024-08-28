@@ -16,10 +16,10 @@ def visualize_predictions(images, targets, img_files):
 
         for i, b in enumerate(boxes):
             x_center, y_center, width, height = b.tolist()
-            x_min = x_center - width / 2
-            y_min = y_center - height / 2
-            x_max = x_center + width / 2
-            y_max = y_center + height / 2
+            x_min = x_center
+            y_min = y_center
+            x_max = x_center + width
+            y_max = y_center + height
             rect = patches.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min, linewidth=1, edgecolor='r',
                                      facecolor='none')
             ax.add_patch(rect)

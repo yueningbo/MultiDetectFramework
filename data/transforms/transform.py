@@ -25,7 +25,7 @@ class YOLOv1Transform:
 
     def __call__(self, img, boxes):
         # Ensure the canvas_size is correctly initialized with img size
-        boxes = BoundingBoxes(boxes, format='CXCYWH', canvas_size=img.shape[-2:])
+        boxes = BoundingBoxes(boxes, format='XYWH', canvas_size=img.shape[-2:])
         h, w = img.shape[-2:]
         pad_horizontal = True if h > w else False
         pad_vertical = not pad_horizontal
@@ -37,8 +37,9 @@ class YOLOv1Transform:
             v2.Resize(size=self.size, antialias=True),
             v2.RandomHorizontalFlip(p=1),
         ])
-
+        print(boxes)
         out_img, out_boxes = transforms(img, boxes)
+        print(out_boxes)
 
         return out_img, out_boxes
 
@@ -48,10 +49,7 @@ if __name__ == '__main__':
     img_dir = 'data/datasets/open-images-bus-trucks/images'  # 替换为你的图像目录路径
     img_file = '0a5b2310fe6e429f.jpg'  # 替换为实际的图像文件名
     img = read_image(f'{img_dir}/{img_file}')
-    boxes = torch.tensor([[0.5028125, 0.5046905, 0.880625, 0.990619]])  # 示例注释
-    img_h, img_w = img.shape[-2:]
-    boxes[:, (0, 2)] *= img_w
-    boxes[:, (1, 3)] *= img_h
+    boxes = torch.tensor([[16, 1, 225, 170]])  # 示例注释
 
     # 创建转换对象
     transform = YOLOv1Transform(size=(224, 224))
