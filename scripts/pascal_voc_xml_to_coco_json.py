@@ -3,30 +3,15 @@ import os
 import json
 
 xml_path = 'data/datasets/VOCdevkit/VOC2007/Annotations'
-image_path = 'data/dataset/VOCdevkit/voc2007/JPEGImages'
+image_path = '/data/dataset/VOCdevkit/voc2007/JPEGImages'
 
 train_txt = 'trainval.txt'
 val_txt = 'test.txt'
 annot = "./data/dataset/annotation"
 
-coco = {
-    'images': [],
-    'type': 'instances',
-    'annotations': [],
-    'categories': []
-}
 
-category_set = {}
-image_set = set()
-
-category_item_id = 0
-image_id = 0
-annotation_id = 0
-
-
-def addCatItem(name):
-    global category_item_id
-    category_item_id += 1
+def addCatItem(coco, category_set, name):
+    category_item_id = len(category_set) + 1
     category_item = {
         'supercategory': 'none',
         'id': category_item_id,
@@ -37,12 +22,11 @@ def addCatItem(name):
     return category_item_id
 
 
-def addImgItem(file_name, size):
-    global image_id
+def addImgItem(coco, image_set, file_name, size):
+    image_id = len(coco['images']) + 1
     if None in (file_name, size['width'], size['height']):
         raise ValueError('Missing filename or image size information in XML.')
 
-    image_id += 1
     image_item = {
         'id': image_id,
         'file_name': file_name,
@@ -54,8 +38,7 @@ def addImgItem(file_name, size):
     return image_id
 
 
-def addAnnoItem(object_name, image_id, category_id, bbox):
-    global annotation_id
+def addAnnoItem(coco, annotation_id, image_id, category_id, bbox):
     seg = [
         bbox[0], bbox[1],
         bbox[0], bbox[1] + bbox[3],
@@ -63,7 +46,6 @@ def addAnnoItem(object_name, image_id, category_id, bbox):
                  bbox[0] + bbox[2], bbox[1]
     ]
 
-    annotation_id += 1
     annotation_item = {
         'segmentation': [seg],
         'area': bbox[2] * bbox[3],
@@ -77,13 +59,14 @@ def addAnnoItem(object_name, image_id, category_id, bbox):
     coco['annotations'].append(annotation_item)
 
 
-def parseXmlFiles(xml_path, is_train_data=True):
-    txt_file_name = train_txt if is_train_data else val_txt
+def parseXmlFiles(xml_path, txt_file_name, coco, category_set, image_set):
     img_ids_set = set()
-
     txt_path = r'D:\git_project\MultiDetectFramework\data\datasets\VOCdevkit\VOC2007\ImageSets\Main'
+
     with open(os.path.join(txt_path, txt_file_name), 'r') as f:
         img_ids_set.update(line.split()[0] for line in f.readlines())
+
+    annotation_id = 0
 
     for f in os.listdir(xml_path):
         if not f.endswith('.xml') or f.split('.')[0] not in img_ids_set:
@@ -120,7 +103,7 @@ def parseXmlFiles(xml_path, is_train_data=True):
                     if subelem.tag == 'name':
                         object_name = subelem.text
                         if object_name not in category_set:
-                            current_category_id = addCatItem(object_name)
+                            current_category_id = addCatItem(coco, category_set, object_name)
                         else:
                             current_category_id = category_set[object_name]
 
@@ -130,7 +113,7 @@ def parseXmlFiles(xml_path, is_train_data=True):
 
                 if None not in bndbox.values() and object_name:
                     if current_image_id is None:
-                        current_image_id = addImgItem(file_name, size)
+                        current_image_id = addImgItem(coco, image_set, file_name, size)
                         print(f'Added image: {file_name} with size {size}')
 
                     bbox = [
@@ -139,17 +122,28 @@ def parseXmlFiles(xml_path, is_train_data=True):
                         bndbox['xmax'] - bndbox['xmin'],
                         bndbox['ymax'] - bndbox['ymin']
                     ]
+                    annotation_id += 1
                     print(f'Adding annotation: {object_name}, {current_image_id}, {current_category_id}, {bbox}')
-                    addAnnoItem(object_name, current_image_id, current_category_id, bbox)
+                    addAnnoItem(coco, annotation_id, object_name, current_image_id, current_category_id, bbox)
 
 
-def build_coco_annot(xml_path, output_path, is_train_data=True):
-    parseXmlFiles(xml_path, is_train_data)
+def build_coco_annot(xml_path, output_path, txt_file_name):
+    coco = {
+        'images': [],
+        'type': 'instances',
+        'annotations': [],
+        'categories': []
+    }
+    category_set = {}
+    image_set = set()
+
+    parseXmlFiles(xml_path, txt_file_name, coco, category_set, image_set)
+
     with open(output_path, 'w') as f:
         json.dump(coco, f)
 
 
 # Example usage:
-# build_coco_annot(xml_path, "./train.json")
-build_coco_annot(xml_path, "./test.json", is_train_data=False)
-# build_coco_annot(xml_path, "/val.json")
+# build_coco_annot(xml_path, "./train.json", train_txt)
+build_coco_annot(xml_path, "./test.json", val_txt)
+# build_coco_annot(xml_path, "/val.json", val_txt)
