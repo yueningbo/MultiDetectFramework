@@ -1,0 +1,10 @@
+{
+  "num_classes": 20,
+  "num_bounding_boxes": 5,
+  "grid_size": 7,
+  "learning_rate": 0.001,
+  "decay": 0.0005,
+  "momentum": 0.9,
+  "epochs": 100,
+  "batch_size": 64
+}

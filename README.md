@@ -8,50 +8,53 @@ R-CNN。这个框架旨在提供一个统一的平台，用于开发、测试和
 ### 目录结构
 
 ```
-Detection_Framework/ # Root directory
+MultiDetectFramework/
 │
-├── data/ # Data directory
-│   ├── datasets/ # Datasets directory
-│   ├── transforms/ # Transforms directory
-│   │   └── data_augmentation.py # Data augmentation script
-│   └── loaders/ # Loaders directory
-│       └── dataset_loader.py # Dataset loader script
+├── data/                      # 数据目录
+│   ├── datasets/              # 数据集目录
+│   ├── transforms/            # 数据转换和增强脚本
+│   │   └── data_augmentation.py
+│   └── loaders/               # 数据加载脚本
+│       └── dataset_loader.py
 │
-├── models/ # Models directory
-│   ├── base/ # Base models directory
-│   │   └── base_model.py # Base model script
-│   ├── yolov1/ # YOLOv1 models directory
-│   │   └── yolov1_model.py # YOLOv1 model script
-│   └── utils/ # Utilities directory
-│       └── parser.py # Parser script
+├── models/                    # 模型目录
+│   ├── base/                  # 基础模型
+│   │   └── base_model.py
+│   ├── yolov1/                # YOLOv1 模型
+│   │   └── yolov1_model.py
+│   └── utils/                 # 模型工具
+│       └── parser.py
 │
-├── utils/ # Utilities directory
-│   ├── losses.py # Losses script
-│   ├── metrics.py # Metrics script
-│   ├── visualization.py # Visualization script
-│   └── utils.py # Utilities script
+├── utils/                     # 工具目录
+│   ├── losses.py              # 损失函数
+│   ├── metrics.py             # 评估指标
+│   ├── visualization.py       # 可视化工具
+│   └── utils.py               # 通用工具
 │
-├── configs/ # Configurations directory
-│   ├── yolov1.json # YOLOv1 configuration file
-│   └── train_config.json # Training configuration file
+├── configs/                   # 配置文件
+│   ├── yolov1.json            # YOLOv1 配置
+│   └── train_config.json      # 训练配置
 │
-├── scripts/ # Scripts directory
-│   ├── train.py # Training script
-│   ├── test.py # Testing script
-│   └── evaluate.py # Evaluation script
+├── scripts/                   # 脚本目录
+│   ├── train.py               # 训练脚本
+│   ├── test.py                # 测试脚本
+│   └── evaluate.py            # 评估脚本
 │
-├── logs/ # Logs directory
-│   ├── train/ # Training logs directory
-│   └── test/ # Testing logs directory
+├── logs/                      # 日志目录
+│   ├── train/                 # 训练日志
+│   └── test/                  # 测试日志
 │
-├── outputs/ # Outputs directory
-│   ├── yolov1/ # YOLOv1 outputs directory
-│   └── faster_rcnn/ # Faster R-CNN outputs directory
+├── outputs/                   # 输出目录
+│   ├── yolov1/                # YOLOv1 输出
+│   └── faster_rcnn/           # Faster R-CNN 输出
 │
-└── docs/ # Documentation directory
-    ├── model_architecture.md # Model architecture document
-    └── training_guidelines.md # Training guidelines document
-
+├── checkpoints/               # 模型权重目录
+│   ├── yolov1/                # YOLOv1 权重
+│   └── faster_rcnn/           # Faster R-CNN 权重
+│
+└── docs/                      # 文档目录
+    ├── model_architecture.md  # 模型架构文档
+    └── training_guidelines.md # 训练指南
 ```
 
 运行示例
