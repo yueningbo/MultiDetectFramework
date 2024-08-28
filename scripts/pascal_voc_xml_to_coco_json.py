@@ -3,20 +3,20 @@ import os
 import json
 
 xml_path = 'data/datasets/VOCdevkit/VOC2007/Annotations'
-image_path = '/data/dataset/VOCdevkit/voc2007/JPEGImages'
+image_path = 'data/dataset/VOCdevkit/voc2007/JPEGImages'
 
 train_txt = 'trainval.txt'
 val_txt = 'test.txt'
-
 annot = "./data/dataset/annotation"
 
-coco = dict()
-coco['images'] = []
-coco['type'] = 'instances'
-coco['annotations'] = []
-coco['categories'] = []
+coco = {
+    'images': [],
+    'type': 'instances',
+    'annotations': [],
+    'categories': []
+}
 
-category_set = dict()
+category_set = {}
 image_set = set()
 
 category_item_id = 0
@@ -26,11 +26,12 @@ annotation_id = 0
 
 def addCatItem(name):
     global category_item_id
-    category_item = dict()
-    category_item['supercategory'] = 'none'
     category_item_id += 1
-    category_item['id'] = category_item_id
-    category_item['name'] = name
+    category_item = {
+        'supercategory': 'none',
+        'id': category_item_id,
+        'name': name
+    }
     coco['categories'].append(category_item)
     category_set[name] = category_item_id
     return category_item_id
@@ -38,18 +39,16 @@ def addCatItem(name):
 
 def addImgItem(file_name, size):
     global image_id
-    if file_name is None:
-        raise Exception('Could not find filename tag in xml file.')
-    if size['width'] is None:
-        raise Exception('Could not find width tag in xml file.')
-    if size['height'] is None:
-        raise Exception('Could not find height tag in xml file.')
+    if None in (file_name, size['width'], size['height']):
+        raise ValueError('Missing filename or image size information in XML.')
+
     image_id += 1
-    image_item = dict()
-    image_item['id'] = image_id
-    image_item['file_name'] = file_name
-    image_item['width'] = size['width']
-    image_item['height'] = size['height']
+    image_item = {
+        'id': image_id,
+        'file_name': file_name,
+        'width': size['width'],
+        'height': size['height']
+    }
     coco['images'].append(image_item)
     image_set.add(file_name)
     return image_id
@@ -57,61 +56,38 @@ def addImgItem(file_name, size):
 
 def addAnnoItem(object_name, image_id, category_id, bbox):
     global annotation_id
-    annotation_item = dict()
-    annotation_item['segmentation'] = []
-    seg = []
-    # bbox[] is x,y,w,h
-    # left_top
-    seg.append(bbox[0])
-    seg.append(bbox[1])
-    # left_bottom
-    seg.append(bbox[0])
-    seg.append(bbox[1] + bbox[3])
-    # right_bottom
-    seg.append(bbox[0] + bbox[2])
-    seg.append(bbox[1] + bbox[3])
-    # right_top
-    seg.append(bbox[0] + bbox[2])
-    seg.append(bbox[1])
+    seg = [
+        bbox[0], bbox[1],
+        bbox[0], bbox[1] + bbox[3],
+                 bbox[0] + bbox[2], bbox[1] + bbox[3],
+                 bbox[0] + bbox[2], bbox[1]
+    ]
 
-    annotation_item['segmentation'].append(seg)
-
-    annotation_item['area'] = bbox[2] * bbox[3]
-    annotation_item['iscrowd'] = 0
-    annotation_item['ignore'] = 0
-    annotation_item['image_id'] = image_id
-    annotation_item['bbox'] = bbox
-    annotation_item['category_id'] = category_id
     annotation_id += 1
-    annotation_item['id'] = annotation_id
+    annotation_item = {
+        'segmentation': [seg],
+        'area': bbox[2] * bbox[3],
+        'iscrowd': 0,
+        'ignore': 0,
+        'image_id': image_id,
+        'bbox': bbox,
+        'category_id': category_id,
+        'id': annotation_id
+    }
     coco['annotations'].append(annotation_item)
 
 
 def parseXmlFiles(xml_path, is_train_data=True):
+    txt_file_name = train_txt if is_train_data else val_txt
     img_ids_set = set()
+
     txt_path = r'D:\git_project\MultiDetectFramework\data\datasets\VOCdevkit\VOC2007\ImageSets\Main'
-    if is_train_data:
-        txt_file_name = train_txt
-    else:
-        txt_file_name = val_txt
     with open(os.path.join(txt_path, txt_file_name), 'r') as f:
-        for l in f.readlines():
-            img_ids_set.add(l.split()[0])
+        img_ids_set.update(line.split()[0] for line in f.readlines())
 
     for f in os.listdir(xml_path):
-        if f.split('.')[0] not in img_ids_set:
+        if not f.endswith('.xml') or f.split('.')[0] not in img_ids_set:
             continue
-        if not f.endswith('.xml'):
-            continue
-
-        bndbox = dict()
-        size = dict()
-        current_image_id = None
-        current_category_id = None
-        file_name = None
-        size['width'] = None
-        size['height'] = None
-        size['depth'] = None
 
         xml_file = os.path.join(xml_path, f)
         print(xml_file)
@@ -119,83 +95,61 @@ def parseXmlFiles(xml_path, is_train_data=True):
         tree = ET.parse(xml_file)
         root = tree.getroot()
         if root.tag != 'annotation':
-            raise Exception('pascal voc xml root element should be annotation, rather than {}'.format(root.tag))
+            raise ValueError(f'Pascal VOC XML root element should be "annotation", found {root.tag}.')
 
-        # elem is <folder>, <filename>, <size>, <object>
+        size = {'width': None, 'height': None, 'depth': None}
+        file_name = None
+        current_image_id = None
+
         for elem in root:
-            current_parent = elem.tag
-            current_sub = None
-            object_name = None
-
-            if elem.tag == 'folder':
-                continue
-
             if elem.tag == 'filename':
                 file_name = elem.text
-                if file_name in category_set:
-                    raise Exception('file_name duplicated')
+                if file_name in image_set:
+                    raise ValueError(f'Duplicated image: {file_name}')
 
-            # add img item only after parse <size> tag
-            elif current_image_id is None and file_name is not None and size['width'] is not None:
-                if file_name not in image_set:
-                    current_image_id = addImgItem(file_name, size)
-                    print('add image with {} and {}'.format(file_name, size))
-                else:
-                    raise Exception('duplicated image: {}'.format(file_name))
-                    # subelem is <width>, <height>, <depth>, <name>, <bndbox>
-            for subelem in elem:
-                bndbox['xmin'] = None
-                bndbox['xmax'] = None
-                bndbox['ymin'] = None
-                bndbox['ymax'] = None
-
-                current_sub = subelem.tag
-                if current_parent == 'object' and subelem.tag == 'name':
-                    object_name = subelem.text
-                    if object_name not in category_set:
-                        current_category_id = addCatItem(object_name)
-                    else:
-                        current_category_id = category_set[object_name]
-
-                elif current_parent == 'size':
-                    if size[subelem.tag] is not None:
-                        raise Exception('xml structure broken at size tag.')
+            elif elem.tag == 'size':
+                for subelem in elem:
                     size[subelem.tag] = int(subelem.text)
 
-                # option is <xmin>, <ymin>, <xmax>, <ymax>, when subelem is <bndbox>
-                for option in subelem:
-                    if current_sub == 'bndbox':
-                        if bndbox[option.tag] is not None:
-                            raise Exception('xml structure corrupted at bndbox tag.')
-                        bndbox[option.tag] = int(option.text)
+            elif elem.tag == 'object':
+                bndbox = {'xmin': None, 'ymin': None, 'xmax': None, 'ymax': None}
+                object_name = None
+                current_category_id = None
 
-                # only after parse the <object> tag
-                if bndbox['xmin'] is not None:
-                    if object_name is None:
-                        raise Exception('xml structure broken at bndbox tag')
+                for subelem in elem:
+                    if subelem.tag == 'name':
+                        object_name = subelem.text
+                        if object_name not in category_set:
+                            current_category_id = addCatItem(object_name)
+                        else:
+                            current_category_id = category_set[object_name]
+
+                    elif subelem.tag == 'bndbox':
+                        for option in subelem:
+                            bndbox[option.tag] = int(option.text)
+
+                if None not in bndbox.values() and object_name:
                     if current_image_id is None:
-                        raise Exception('xml structure broken at bndbox tag')
-                    if current_category_id is None:
-                        raise Exception('xml structure broken at bndbox tag')
-                    bbox = []
-                    # x
-                    bbox.append(bndbox['xmin'])
-                    # y
-                    bbox.append(bndbox['ymin'])
-                    # w
-                    bbox.append(bndbox['xmax'] - bndbox['xmin'])
-                    # h
-                    bbox.append(bndbox['ymax'] - bndbox['ymin'])
-                    print('add annotation with {},{},{},{}'.format(object_name, current_image_id, current_category_id,
-                                                                   bbox))
+                        current_image_id = addImgItem(file_name, size)
+                        print(f'Added image: {file_name} with size {size}')
+
+                    bbox = [
+                        bndbox['xmin'],
+                        bndbox['ymin'],
+                        bndbox['xmax'] - bndbox['xmin'],
+                        bndbox['ymax'] - bndbox['ymin']
+                    ]
+                    print(f'Adding annotation: {object_name}, {current_image_id}, {current_category_id}, {bbox}')
                     addAnnoItem(object_name, current_image_id, current_category_id, bbox)
 
 
 def build_coco_annot(xml_path, output_path, is_train_data=True):
     parseXmlFiles(xml_path, is_train_data)
-    json.dump(coco, open(output_path, 'w'))
+    with open(output_path, 'w') as f:
+        json.dump(coco, f)
 
 
+# Example usage:
 # build_coco_annot(xml_path, "./train.json")
 build_coco_annot(xml_path, "./test.json", is_train_data=False)
 # build_coco_annot(xml_path, "/val.json")
