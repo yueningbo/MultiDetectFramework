@@ -11,6 +11,8 @@ from pycocotools.coco import COCO
 def collate_fn(batch, device):
     images, targets, filenames = zip(*batch)
     images = torch.stack(images, dim=0).to(device)
+    targets = [{k: v.to(device) for k, v in t.items()} for t in targets]  # 将targets中的每个张量转移到device
+    filenames = [f for f in filenames]  # 文件名不需要转移到device
     return images, targets, filenames  # 返回图像、注释和文件名
 
 

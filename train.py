@@ -7,7 +7,6 @@ from utils.losses import compute_loss
 from utils.metrics import evaluate_model
 from models.yolov1.yolov1_model import YOLOv1
 from utils.utils import print_model_flops
-from torch.cuda.amp import GradScaler, autocast
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -28,18 +27,17 @@ def train_epoch(model, optimizer, train_loader, scaler, device):
         optimizer.zero_grad()
 
         # 自动选择数据类型
-        with autocast():
+        with torch.cuda.amp.autocast(enabled=bool(scaler)):
             outputs = model(images)
             loss = compute_loss(outputs, targets)
 
-        # 缩放损失，调用 backward() 产生缩放的梯度
-        scaler.scale(loss).backward()
-
-        # 调整缩放梯度，如果没有梯度溢出，则调用 optimizer.step()
-        scaler.step(optimizer)
-
-        # 为下一轮迭代更新缩放器
-        scaler.update()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
 
         total_loss += loss.item()
     return total_loss / len(train_loader)
@@ -54,15 +52,16 @@ def save_model_weights(model, weights_path, epoch):
     torch.save(model.state_dict(), f'{weights_path}_epoch_{epoch}.pth')
 
 
-def main(config_path, weights_path):
+def main(config_path, weights_path, amp):
     config = load_config(config_path)
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model = YOLOv1(config['grid_size'], config['num_bounding_boxes'], config['num_classes']).to(device)
+    model = YOLOv1(config['grid_size'], config['num_bounding_boxes'], config['num_classes'])
     print_model_flops(model, (3, 448, 448))
+    model.to(device)
 
-    scaler = GradScaler()
+    scaler = torch.cuda.amp.GradScaler() if amp else None
 
     optimizer = torch.optim.SGD(model.parameters(), lr=config['learning_rate'], momentum=config['momentum'],
                                 weight_decay=config['decay'])
@@ -84,4 +83,5 @@ def main(config_path, weights_path):
 if __name__ == "__main__":
     config_path = 'configs/yolov1.json'
     weights_path = 'outputs/yolov1/model_weights.pth'
-    main(config_path, weights_path)
+    amp = True
+    main(config_path, weights_path, amp)
