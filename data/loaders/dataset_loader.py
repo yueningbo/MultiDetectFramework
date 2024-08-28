@@ -61,8 +61,8 @@ class COCODataset(Dataset):
 
 
 def test_dataset():
-    img_dir = 'data/datasets/open-images-bus-trucks/images'
-    annotation_dir = r'data\datasets\open-images-bus-trucks\annotations\micro_open_images_train_coco_format.json'
+    img_dir = 'data/datasets/VOCdevkit/VOC2007/JPEGImages'
+    annotation_dir = r'data/datasets/VOCdevkit/VOC2007/test.json'
     transform = YOLOv1Transform()
     dataset = COCODataset(img_dir, annotation_dir, transform=transform)
     dataloader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=collate_fn)

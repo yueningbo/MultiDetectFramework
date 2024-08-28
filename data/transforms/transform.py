@@ -20,7 +20,7 @@ class PaddingToSquare:
 
 
 class YOLOv1Transform:
-    def __init__(self, size=(224, 224)):
+    def __init__(self, size=(448, 448)):
         self.size = size
 
     def __call__(self, img, boxes):
@@ -46,8 +46,8 @@ class YOLOv1Transform:
 
 if __name__ == '__main__':
     # 测试代码
-    img_dir = 'data/datasets/open-images-bus-trucks/images'  # 替换为你的图像目录路径
-    img_file = '0a5b2310fe6e429f.jpg'  # 替换为实际的图像文件名
+    img_dir = 'data/datasets/VOCdevkit/VOC2007/JPEGImages'  # 替换为你的图像目录路径
+    img_file = '000016.jpg'  # 替换为实际的图像文件名
     img = read_image(f'{img_dir}/{img_file}')
     boxes = torch.tensor([[16, 1, 225, 170]])  # 示例注释
 
