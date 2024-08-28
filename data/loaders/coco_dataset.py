@@ -8,12 +8,10 @@ from pycocotools.coco import COCO
 
 
 # 自定义 collate_fn 函数
-def collate_fn(batch):
-    images = [item[0] for item in batch]
-    annotations = [item[1] for item in batch]
-    filenames = [item[2] for item in batch]  # 收集文件名
-    images = torch.stack(images, dim=0)
-    return images, annotations, filenames  # 返回图像、注释和文件名
+def collate_fn(batch, device):
+    images, targets, filenames = zip(*batch)
+    images = torch.stack(images, dim=0).to(device)
+    return images, targets, filenames  # 返回图像、注释和文件名
 
 
 class COCODataset(Dataset):

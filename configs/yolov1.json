@@ -2,11 +2,13 @@
   "num_classes": 20,
   "num_bounding_boxes": 5,
   "grid_size": 7,
+
   "learning_rate": 0.001,
   "decay": 0.0005,
   "momentum": 0.9,
   "epochs": 100,
-  "batch_size": 64,
+  "batch_size": 4,
+
   "img_dir": "data/datasets/VOCdevkit/VOC2007/JPEGImages",
   "train_annotation_path": "data/datasets/VOCdevkit/VOC2007/train.json",
   "test_annotation_path": "data/datasets/VOCdevkit/VOC2007/test.json"
