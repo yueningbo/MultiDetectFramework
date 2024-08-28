@@ -2,27 +2,20 @@ import xml.etree.ElementTree as ET
 import os
 import json
 
-xml_path = 'data/datasets/VOCdevkit/VOC2007/Annotations'
-image_path = '/data/dataset/VOCdevkit/voc2007/JPEGImages'
 
-train_txt = 'trainval.txt'
-val_txt = 'test.txt'
-annot = "./data/dataset/annotation"
-
-
-def addCatItem(coco, category_set, name):
-    category_item_id = len(category_set) + 1
+def add_category(coco, category_set, name):
+    category_id = len(category_set) + 1
     category_item = {
         'supercategory': 'none',
-        'id': category_item_id,
+        'id': category_id,
         'name': name
     }
     coco['categories'].append(category_item)
-    category_set[name] = category_item_id
-    return category_item_id
+    category_set[name] = category_id
+    return category_id
 
 
-def addImgItem(coco, image_set, file_name, size):
+def add_image(coco, image_set, file_name, size):
     image_id = len(coco['images']) + 1
     if None in (file_name, size['width'], size['height']):
         raise ValueError('Missing filename or image size information in XML.')
@@ -38,7 +31,7 @@ def addImgItem(coco, image_set, file_name, size):
     return image_id
 
 
-def addAnnoItem(coco, annotation_id, image_id, category_id, bbox):
+def add_annotation(coco, annotation_id, image_id, category_id, bbox):
     seg = [
         bbox[0], bbox[1],
         bbox[0], bbox[1] + bbox[3],
@@ -59,26 +52,24 @@ def addAnnoItem(coco, annotation_id, image_id, category_id, bbox):
     coco['annotations'].append(annotation_item)
 
 
-def parseXmlFiles(xml_path, txt_file_name, coco, category_set, image_set):
-    img_ids_set = set()
-    txt_path = r'D:\git_project\MultiDetectFramework\data\datasets\VOCdevkit\VOC2007\ImageSets\Main'
-
+def parse_xml_files(xml_path, txt_file_name, coco, category_set, image_set, txt_path):
     with open(os.path.join(txt_path, txt_file_name), 'r') as f:
-        img_ids_set.update(line.split()[0] for line in f.readlines())
+        img_ids_set = {line.split()[0] for line in f.readlines()}
 
     annotation_id = 0
 
-    for f in os.listdir(xml_path):
-        if not f.endswith('.xml') or f.split('.')[0] not in img_ids_set:
+    for xml_file in os.listdir(xml_path):
+        if not xml_file.endswith('.xml') or xml_file.split('.')[0] not in img_ids_set:
             continue
 
-        xml_file = os.path.join(xml_path, f)
-        print(xml_file)
+        xml_full_path = os.path.join(xml_path, xml_file)
+        print(f'Processing file: {xml_full_path}')
 
-        tree = ET.parse(xml_file)
+        tree = ET.parse(xml_full_path)
         root = tree.getroot()
+
         if root.tag != 'annotation':
-            raise ValueError(f'Pascal VOC XML root element should be "annotation", found {root.tag}.')
+            raise ValueError(f'Invalid XML root element, expected "annotation", got "{root.tag}".')
 
         size = {'width': None, 'height': None, 'depth': None}
         file_name = None
@@ -88,7 +79,7 @@ def parseXmlFiles(xml_path, txt_file_name, coco, category_set, image_set):
             if elem.tag == 'filename':
                 file_name = elem.text
                 if file_name in image_set:
-                    raise ValueError(f'Duplicated image: {file_name}')
+                    raise ValueError(f'Duplicate image: {file_name}')
 
             elif elem.tag == 'size':
                 for subelem in elem:
@@ -102,10 +93,8 @@ def parseXmlFiles(xml_path, txt_file_name, coco, category_set, image_set):
                 for subelem in elem:
                     if subelem.tag == 'name':
                         object_name = subelem.text
-                        if object_name not in category_set:
-                            current_category_id = addCatItem(coco, category_set, object_name)
-                        else:
-                            current_category_id = category_set[object_name]
+                        current_category_id = category_set.get(object_name) or add_category(coco, category_set,
+                                                                                            object_name)
 
                     elif subelem.tag == 'bndbox':
                         for option in subelem:
@@ -113,7 +102,7 @@ def parseXmlFiles(xml_path, txt_file_name, coco, category_set, image_set):
 
                 if None not in bndbox.values() and object_name:
                     if current_image_id is None:
-                        current_image_id = addImgItem(coco, image_set, file_name, size)
+                        current_image_id = add_image(coco, image_set, file_name, size)
                         print(f'Added image: {file_name} with size {size}')
 
                     bbox = [
@@ -123,11 +112,12 @@ def parseXmlFiles(xml_path, txt_file_name, coco, category_set, image_set):
                         bndbox['ymax'] - bndbox['ymin']
                     ]
                     annotation_id += 1
-                    print(f'Adding annotation: {object_name}, {current_image_id}, {current_category_id}, {bbox}')
-                    addAnnoItem(coco, annotation_id, object_name, current_image_id, current_category_id, bbox)
+                    print(
+                        f'Adding annotation: {object_name}, Image ID: {current_image_id}, Category ID: {current_category_id}, BBox: {bbox}')
+                    add_annotation(coco, annotation_id, current_image_id, current_category_id, bbox)
 
 
-def build_coco_annot(xml_path, output_path, txt_file_name):
+def build_coco_annotations(xml_path, output_path, txt_file_name, txt_path):
     coco = {
         'images': [],
         'type': 'instances',
@@ -137,13 +127,19 @@ def build_coco_annot(xml_path, output_path, txt_file_name):
     category_set = {}
     image_set = set()
 
-    parseXmlFiles(xml_path, txt_file_name, coco, category_set, image_set)
+    parse_xml_files(xml_path, txt_file_name, coco, category_set, image_set, txt_path)
 
     with open(output_path, 'w') as f:
         json.dump(coco, f)
 
 
-# Example usage:
-# build_coco_annot(xml_path, "./train.json", train_txt)
-build_coco_annot(xml_path, "./test.json", val_txt)
-# build_coco_annot(xml_path, "/val.json", val_txt)
+if __name__ == "__main__":
+    xml_path = 'data/datasets/VOCdevkit/VOC2007/Annotations'
+    image_path = 'data/dataset/VOCdevkit/voc2007/JPEGImages'
+    txt_path = 'data/datasets/VOCdevkit/VOC2007/ImageSets/Main'
+    txt_file = ['train.txt', 'test.txt', 'val.txt']
+    output_path = "data/datasets/VOCdevkit/VOC2007"
+
+    for file in txt_file:
+        output_file_path = os.path.join(output_path, file.replace('txt', 'json'))
+        build_coco_annotations(xml_path, output_file_path, file, txt_path)
