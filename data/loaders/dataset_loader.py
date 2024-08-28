@@ -11,7 +11,9 @@ from utils.visualization import visualize_predictions
 def collate_fn(batch):
     images = [item[0] for item in batch]
     annotations = [item[1] for item in batch]
-    return images, annotations
+    filenames = [item[2] for item in batch]  # 收集文件名
+    images = torch.stack(images, dim=0)
+    return images, annotations, filenames  # 返回图像、注释和文件名
 
 
 class BusAndTruckDataset(Dataset):
@@ -41,7 +43,7 @@ class BusAndTruckDataset(Dataset):
         if self.transform:
             image, annotations = self.transform(image, annotations)
 
-        return image, annotations
+        return image, annotations, self.img_files[idx]  # 返回图像、注释和文件名
 
 
 def test_dataset():
@@ -51,12 +53,12 @@ def test_dataset():
     dataset = BusAndTruckDataset(img_dir, annotation_dir, transform=transform)
     dataloader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=collate_fn)
 
-    for i, (images, annotations) in enumerate(dataloader):
+    for i, (images, annotations, img_file) in enumerate(dataloader):
         print(f"Batch {i + 1}:")
         print(f"  Image batch size: {len(images)}")  # 打印图像的批次大小
         print(f"  Annotation batch size: {len(annotations)}")  # 打印标注的批次大小
 
-        visualize_predictions(images, annotations)
+        visualize_predictions(images, annotations, img_file)
 
 
 if __name__ == '__main__':
