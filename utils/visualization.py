@@ -1,31 +1,29 @@
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+from matplotlib import patches
 
 
-def visualize_predictions(images, annotations, img_file):
-    print(images.shape)  # example:  torch.Size([2, 3, 224, 224])
-    print(
-        annotations)  # example:  [tensor([[  0.0000, 106.6800, 133.8400,  97.1600, 105.6532]]), tensor([[  1.0000, 107.2400, 126.3973, 190.9600, 151.4525]])]
-    print(img_file)  # example: 'a32b89b2580a6e81.jpg', 'ec10f38886481c7a.jpg']
-    """
-    
-['a32b89b2580a6e81.jpg', 'ec10f38886481c7a.jpg']
-    Visualize the predictions on the images.
-    """
-    for i, (image, annotation) in enumerate(zip(images, annotations)):
-        image = image.permute(1, 2, 0)  # Convert from (C, H, W) to (H, W, C)
+def visualize_predictions(images, targets, img_files):
+    for i, (image, target, img_file) in enumerate(zip(images, targets, img_files)):
+        print(f"Visualizing predictions for image: {img_file}")
+        image = image.permute(1, 2, 0)  # 从 (C, H, W) 转换为 (H, W, C)
         image = image.numpy()  # 转换为 numpy 数组
+        h, w = image.shape[:2]
         plt.imshow(image)
         ax = plt.gca()
 
-        for ann in annotation:
-            class_id, x_center, y_center, width, height = ann
-            x_min = int((x_center - width / 2) * image.shape[1])
-            y_min = int((y_center - height / 2) * image.shape[0])
-            x_max = int((x_center + width / 2) * image.shape[1])
-            y_max = int((y_center + height / 2) * image.shape[0])
+        boxes = target['boxes']
+        labels = target['labels']
+
+        for i, b in enumerate(boxes):
+            x_center, y_center, width, height = b.tolist()
+            x_min = x_center - width / 2
+            y_min = y_center - height / 2
+            x_max = x_center + width / 2
+            y_max = y_center + height / 2
             rect = patches.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min, linewidth=1, edgecolor='r',
                                      facecolor='none')
             ax.add_patch(rect)
+            ax.text(x_min, y_min, f'Class: {labels[i]}', bbox=dict(facecolor='white', alpha=0.5))
 
+        plt.title(f"Image {i + 1}: {img_file}")
         plt.show()

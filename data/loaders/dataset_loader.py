@@ -2,6 +2,7 @@ import os
 import torch
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
+from torchvision.io import read_image
 
 from data.transforms.transform import YOLOv1Transform
 from utils.visualization import visualize_predictions
@@ -27,23 +28,37 @@ class BusAndTruckDataset(Dataset):
         return len(self.img_files)
 
     def __getitem__(self, idx):
-        img_path = os.path.join(self.img_dir, self.img_files[idx])
-        image = Image.open(img_path).convert('RGB')
+        file_name = self.img_files[idx]
+        img_path = os.path.join(self.img_dir, file_name)
+        image = read_image(img_path)
 
         annotation_path = os.path.join(self.annotation_dir,
                                        self.img_files[idx].replace('.jpg', '.txt').replace('.png', '.txt'))
-        annotations = []
+        boxes = []
+        labels = []
         with open(annotation_path, 'r') as file:
             for line in file.readlines():
                 class_id, x_center, y_center, width, height = map(float, line.split())
-                annotations.append([class_id, x_center, y_center, width, height])
+                boxes.append([x_center, y_center, width, height])
+                labels.append(class_id)
 
-        annotations = torch.tensor(annotations, dtype=torch.float32).view(-1, 5)
+        boxes = torch.tensor(boxes, dtype=torch.float32).view(-1, 4)
+        labels = torch.tensor(labels, dtype=torch.int8)
+
+        # 把比例转成绝对值
+        img_h, img_w = image.shape[-2:]
+        boxes[:, (0, 2)] *= img_w
+        boxes[:, (1, 3)] *= img_h
 
         if self.transform:
-            image, annotations = self.transform(image, annotations)
+            image, boxes = self.transform(image, boxes)
 
-        return image, annotations, self.img_files[idx]  # 返回图像、注释和文件名
+        targets = {
+            'boxes': boxes,
+            'labels': labels
+        }
+
+        return image, targets, file_name  # 返回图像、注释和文件名
 
 
 def test_dataset():
