@@ -57,13 +57,15 @@ def parse_xml_files(xml_path, txt_file_name, coco, category_set, image_set, txt_
         img_ids_set = {line.split()[0] for line in f.readlines()}
 
     annotation_id = 0
+    xml_files = os.listdir(xml_path)
 
-    for xml_file in os.listdir(xml_path):
+    for i, xml_file in enumerate(xml_files):
         if not xml_file.endswith('.xml') or xml_file.split('.')[0] not in img_ids_set:
+            if xml_file.split('.')[0] not in img_ids_set:
+                print(f'[{i + 1}/{len(xml_files)}]Processing file: {xml_file} not in {txt_file_name}')
             continue
-
         xml_full_path = os.path.join(xml_path, xml_file)
-        print(f'Processing file: {xml_full_path}')
+        print(f'[{i}/{len(xml_files)}]Processing file: {xml_full_path}')
 
         tree = ET.parse(xml_full_path)
         root = tree.getroot()
@@ -112,9 +114,10 @@ def parse_xml_files(xml_path, txt_file_name, coco, category_set, image_set, txt_
                         bndbox['ymax'] - bndbox['ymin']
                     ]
                     annotation_id += 1
-                    print(
-                        f'Adding annotation: {object_name}, Image ID: {current_image_id}, Category ID: {current_category_id}, BBox: {bbox}')
+                    print(f'Adding annotation: {object_name}, Image ID: {current_image_id}, '
+                          f'Category ID: {current_category_id}, Category: {object_name}, BBox: {bbox}')
                     add_annotation(coco, annotation_id, current_image_id, current_category_id, bbox)
+        print('------------------------------------------------')
 
 
 def build_coco_annotations(xml_path, output_path, txt_file_name, txt_path):
@@ -137,9 +140,11 @@ if __name__ == "__main__":
     xml_path = 'data/datasets/VOCdevkit/VOC2007/Annotations'
     image_path = 'data/dataset/VOCdevkit/voc2007/JPEGImages'
     txt_path = 'data/datasets/VOCdevkit/VOC2007/ImageSets/Main'
-    txt_file = ['train.txt', 'test.txt', 'val.txt']
+    txt_file_list = ['train.txt', 'test.txt', 'val.txt']
     output_path = "data/datasets/VOCdevkit/VOC2007"
 
-    for file in txt_file:
-        output_file_path = os.path.join(output_path, file.replace('txt', 'json'))
-        build_coco_annotations(xml_path, output_file_path, file, txt_path)
+    for txt_file in txt_file_list:
+        output_json_path = os.path.join(output_path, txt_file.replace('txt', 'json'))
+        print(f'Building COCO annotations for {txt_file}...')
+        build_coco_annotations(xml_path, output_json_path, txt_file, txt_path)
+        print(f'COCO annotations saved to {output_json_path}')
