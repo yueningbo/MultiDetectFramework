@@ -6,7 +6,7 @@ directories = {
         'data': {
             'datasets': {},
             'transforms': {'data_augmentation.py': None},
-            'loaders': {'dataset_loader.py': None}
+            'loaders': {'coco_dataset.py': None}
         },
         'models': {
             'base': {'base_model.py': None},
@@ -20,7 +20,7 @@ directories = {
             'utils.py': None
         },
         'configs': {
-            'yolov1.json': None,
+            'yolov1.cfg': None,
             'train_config.json': None
         },
         'scripts': {

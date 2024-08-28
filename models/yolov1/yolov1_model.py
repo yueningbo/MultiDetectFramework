@@ -3,10 +3,8 @@ import torch.nn as nn
 
 
 class YOLOv1(nn.Module):
-    def __init__(self, config):
+    def __init__(self, num_bounding_boxes, num_classes):
         super().__init__()
-
-        self.config = config
 
         # 卷积层部分
         self.conv_layers = nn.Sequential(
@@ -41,7 +39,7 @@ class YOLOv1(nn.Module):
             nn.Linear(512 * 7 * 7, 4096),
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(4096, 7 * 7 * (5 * config['num_bounding_boxes'] + config['num_classes']))
+            nn.Linear(4096, 7 * 7 * (5 * num_bounding_boxes + num_classes))
         )
 
     def forward(self, x):

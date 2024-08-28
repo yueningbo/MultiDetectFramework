@@ -2,12 +2,12 @@ import json
 
 import torch
 from models.yolov1.yolov1_model import YOLOv1
-from data.loaders.dataset_loader import load_data
+from data.loaders.coco_dataset import load_data
 from utils.visualization import visualize_predictions
 
 
 def main():
-    model_config = json.loads('configs/yolov1.json')
+    model_config = json.loads('configs/yolov1.cfg')
     model = YOLOv1(model_config)
     model.load_weights('path/to/load/weights')
     test_loader = load_data(config)

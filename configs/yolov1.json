@@ -6,5 +6,8 @@
   "decay": 0.0005,
   "momentum": 0.9,
   "epochs": 100,
-  "batch_size": 64
+  "batch_size": 64,
+  "img_dir": "data/datasets/VOCdevkit/VOC2007/JPEGImages",
+  "train_annotation_path": "data/datasets/VOCdevkit/VOC2007/train.json",
+  "test_annotation_path": "data/datasets/VOCdevkit/VOC2007/test.json"
 }

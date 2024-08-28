@@ -3,7 +3,7 @@ from torchvision.io import read_image
 from torchvision.transforms import v2
 from torchvision.tv_tensors import BoundingBoxes
 
-from utils.visualization import visualize_predictions
+from utils.visualization import visualize_prediction
 
 
 class PaddingToSquare:
@@ -36,10 +36,9 @@ class YOLOv1Transform:
             v2.Pad((pad_size * pad_horizontal, pad_size * pad_vertical)),
             v2.Resize(size=self.size, antialias=True),
             v2.RandomHorizontalFlip(p=1),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
-        print(boxes)
         out_img, out_boxes = transforms(img, boxes)
-        print(out_boxes)
 
         return out_img, out_boxes
 
@@ -48,15 +47,15 @@ if __name__ == '__main__':
     # 测试代码
     img_dir = 'data/datasets/VOCdevkit/VOC2007/JPEGImages'  # 替换为你的图像目录路径
     img_file = '000016.jpg'  # 替换为实际的图像文件名
-    img = read_image(f'{img_dir}/{img_file}')
+    img = read_image(f'{img_dir}/{img_file}').to(torch.float32)
     boxes = torch.tensor([[16, 1, 225, 170]])  # 示例注释
 
     # 创建转换对象
-    transform = YOLOv1Transform(size=(224, 224))
+    transform = YOLOv1Transform(size=(448, 448))
 
     # 应用转换
     out_img, out_boxes = transform(img, boxes)
 
-    targets = {'boxes': out_boxes, 'labels': [1]}
+    target = {'boxes': out_boxes, 'labels': [1]}
 
-    visualize_predictions([out_img], [targets], [img_file])
+    visualize_prediction(out_img, target, img_file)

@@ -1,7 +1,8 @@
 import json
 
 import torch
-from data.loaders.dataset_loader import load_data
+
+from data.loaders import get_loader
 from utils.losses import compute_loss
 from utils.metrics import evaluate_model
 from models.yolov1.yolov1_model import YOLOv1
@@ -13,19 +14,19 @@ def main(config_path, weights_path):
         config = json.load(f)
 
     # Initialize model
-    model = YOLOv1(config)
+    model = YOLOv1(config['num_classes'], config['num_bounding_boxes'])
 
     # Initialize optimizer
     optimizer = torch.optim.SGD(model.parameters(), lr=config['learning_rate'], momentum=config['momentum'],
                                 weight_decay=config['decay'])
 
     # Load data
-    train_loader, test_loader = load_data(config)
+    train_loader, test_loader = get_loader(config)
 
     # Training loop
-    for epoch in range(config.epochs):
+    for epoch in range(config['epochs']):
         model.train()
-        for images, targets in train_loader:
+        for images, targets, img_file in train_loader:
             optimizer.zero_grad()
             outputs = model(images)
             loss = compute_loss(outputs, targets)

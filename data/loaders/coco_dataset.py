@@ -17,6 +17,8 @@ def collate_fn(batch):
 
 
 class COCODataset(Dataset):
+    """COCO format"""
+
     def __init__(self, img_dir, annotation_path, transform=None):
         self.img_dir = img_dir
         self.annotation_path = annotation_path
@@ -34,7 +36,7 @@ class COCODataset(Dataset):
         file_name = self.img_files[idx]
         img_id = self.img_ids[idx]
         img_path = os.path.join(self.img_dir, file_name)
-        image = read_image(img_path)
+        image = read_image(img_path).to(dtype=torch.float32)
 
         ann_ids = self.coco.getAnnIds(imgIds=[img_id])
         coco_annotation = self.coco.loadAnns(ann_ids)
@@ -44,7 +46,6 @@ class COCODataset(Dataset):
         for ann in coco_annotation:
             boxes.append(ann['bbox'])
             labels.append(ann['category_id'])
-        print('boxes:', boxes)
 
         boxes = torch.tensor(boxes, dtype=torch.float32).view(-1, 4)
         labels = torch.tensor(labels, dtype=torch.int64)
@@ -60,20 +61,16 @@ class COCODataset(Dataset):
         return image, targets, file_name
 
 
-def test_dataset():
+if __name__ == '__main__':
     img_dir = 'data/datasets/VOCdevkit/VOC2007/JPEGImages'
     annotation_dir = r'data/datasets/VOCdevkit/VOC2007/test.json'
     transform = YOLOv1Transform()
     dataset = COCODataset(img_dir, annotation_dir, transform=transform)
     dataloader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=collate_fn)
 
-    for i, (images, annotations, img_file) in enumerate(dataloader):
+    for i, (images, targets, img_file) in enumerate(dataloader):
         print(f"Batch {i + 1}:")
         print(f"  Image batch size: {len(images)}")  # 打印图像的批次大小
-        print(f"  Annotation batch size: {len(annotations)}")  # 打印标注的批次大小
+        print(f"  Targets batch size: {len(targets)}")  # 打印Boxes的批次大小
 
-        visualize_predictions(images, annotations, img_file)
-
-
-if __name__ == '__main__':
-    test_dataset()
+        visualize_predictions(images, targets, img_file)
