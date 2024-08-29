@@ -156,8 +156,8 @@ if __name__ == "__main__":
     trainer = Trainer(
         config_path, weights_path, amp,
         summary_writer_path=summary_writer_path,
-        pretrained_weights_path=pretrained_weights_path,
-        freeze_backbone_epoch=5
+        # pretrained_weights_path=pretrained_weights_path,
+        freeze_backbone_epoch=20
     )
 
     trainer.train()

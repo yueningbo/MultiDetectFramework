@@ -14,7 +14,7 @@ class YoloV1Loss(nn.Module):
         self.device = device
 
     def compute_localization_loss(self, pred_box, gt_box):
-        """计算定位损失 (x, y, w, h)"""
+        """计算定位损失 (x_min, y_min, w, h)"""
         loc_loss = (pred_box[0] - gt_box[0]) ** 2 + (pred_box[1] - gt_box[1]) ** 2
         loc_loss += (torch.sqrt(pred_box[2]) - torch.sqrt(gt_box[2])) ** 2
         loc_loss += (torch.sqrt(pred_box[3]) - torch.sqrt(gt_box[3])) ** 2
@@ -41,8 +41,8 @@ class YoloV1Loss(nn.Module):
         """
         outputs.shape: [batch, H, W, C]
         targets: [{
-            'boxes': tensor([[X,Y,H,W],...]),
-            'label':tensor([class_label,...])
+            'boxes': tensor([[X_min,Y_min,W,H],...]),
+            'label': tensor([class_label,...])
             },...]
         """
         batch_size = outputs.size(0)
@@ -67,7 +67,7 @@ class YoloV1Loss(nn.Module):
                 pred_classes = cell_outputs[self.B * 5:]  # torch.Size([20])
 
                 # Compute IoU for each predicted box
-                ious = compute_iou(pred_boxes, gt_boxes)
+                ious = compute_iou(pred_boxes[:, :4], gt_boxes)
                 best_iou, best_box_idx = torch.max(ious, dim=1)
 
                 for b in range(self.B):
@@ -75,11 +75,21 @@ class YoloV1Loss(nn.Module):
                         gt_box_idx = best_box_idx[b]
                         gt_box = gt_boxes[gt_box_idx]
                         pred_box = pred_boxes[b]
+
+                        # Compute the predicted bounding box's center (considering grid offset)
+                        x_min = pred_box[0] + col / self.S
+                        y_min = pred_box[1] + row / self.S
+                        w = pred_box[2]
+                        h = pred_box[3]
+
+                        # Adjusted predicted box (min)
+                        pred_box_adjusted = torch.tensor([x_min, y_min, w, h], device=self.device)
+
                         # 预测的置信度
                         pred_conf = pred_box[4]
 
                         # 计算各个损失
-                        loc_loss = self.compute_localization_loss(pred_box, gt_box)
+                        loc_loss = self.compute_localization_loss(pred_box_adjusted, gt_box)
                         conf_loss = self.compute_confidence_loss(pred_conf, best_iou[b], True)
                         class_loss = self.compute_classification_loss(pred_classes, one_hot_gt_classes)
 
