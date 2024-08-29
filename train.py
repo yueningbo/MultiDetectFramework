@@ -40,7 +40,7 @@ class Trainer:
             # 自动选择数据类型
             with torch.cuda.amp.autocast(enabled=bool(self.scaler)):
                 outputs = self.model(images)
-                criterion = YoloV1Loss()
+                criterion = YoloV1Loss(device=self.device)
                 loss = criterion(outputs, targets)
 
             if self.scaler is not None:

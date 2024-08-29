@@ -1,8 +1,3 @@
-import torch
-
-from utils.utils import bbox_iou
-
-
 def evaluate_model(outputs, targets):
     """
     Evaluate the model performance.
