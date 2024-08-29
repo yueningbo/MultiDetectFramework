@@ -5,10 +5,9 @@ from utils.utils import denormalize
 
 
 def visualize_prediction(image, target, img_id):
-
     image = denormalize(image)
+    img_h, image_w = image.shape[-2:]
 
-    print("img_shape:", image.shape)
     image = image.permute(1, 2, 0)  # 从 (C, H, W) 转换为 (H, W, C)
     image = image.numpy()  # 转换为 numpy 数组
     plt.imshow(image)
@@ -16,6 +15,9 @@ def visualize_prediction(image, target, img_id):
 
     boxes = target['boxes']
     labels = target['labels']
+
+    boxes[:, (0, 2)] *= img_h
+    boxes[:, (1, 3)] *= image_w
 
     for i, b in enumerate(boxes):
         x_center, y_center, width, height = b.tolist()

@@ -55,7 +55,7 @@ def convert_outputs_to_coco_format(output: torch.Tensor, img_id: int, threshold:
     Convert YOLO output tensors to COCO format with NMS applied.
 
     Parameters:
-        output (torch.Tensor): YOLO model output with shape (S, S, C + B * 5).
+        output (torch.Tensor): YOLO model output with shape (S, S, B * 5 + C).
         img_id (int): Image ID.
         threshold (float): Confidence score threshold.
         nms_threshold (float): IoU threshold for NMS.

@@ -17,7 +17,7 @@ writer = SummaryWriter(log_dir='outputs/yolov1')
 
 
 class Trainer:
-    def __init__(self, config_path, weights_path, amp):
+    def __init__(self, config_path, weights_path, amp, freeze_backbone_epoch=20):
         self.config = self.load_config(config_path)
         self.weights_path = weights_path
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -33,6 +33,8 @@ class Trainer:
                                          max_lr=self.config['learning_rate'])
 
         self.train_loader, self.val_loader = get_loader(self.config, self.device)
+        self.freeze_backbone_epoch = freeze_backbone_epoch
+
         logging.info(f'Configuration loaded from {config_path}')
         logging.info(f'Weights will be saved to {weights_path}')
         logging.info(f'Using device: {self.device}')
@@ -42,6 +44,16 @@ class Trainer:
             config = json.load(f)
         logging.info(f'Configuration: {config}')
         return config
+
+    def freeze_backbone(self):
+        for param in self.model.backbone.parameters():
+            param.requires_grad = False
+        logging.info("Backbone parameters frozen.")
+
+    def unfreeze_backbone(self):
+        for param in self.model.backbone.parameters():
+            param.requires_grad = True
+        logging.info("Backbone parameters unfrozen.")
 
     def train_epoch(self, epoch):
         self.model.train()
@@ -99,7 +111,13 @@ class Trainer:
         logging.info(f'Model weights saved to {weights_file}')
 
     def train(self):
+        # Freeze backbone parameters
+        self.freeze_backbone()
         for epoch in range(self.config['epochs']):
+            if epoch >= self.freeze_backbone_epoch:
+                # Unfreeze the backbone after 20 epochs
+                self.unfreeze_backbone()
+
             self.train_epoch(epoch)
 
             if (epoch + 1) % 10 == 0:

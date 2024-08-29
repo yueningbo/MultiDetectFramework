@@ -45,7 +45,7 @@ class YOLOv1Transform:
         canvas_size = out_boxes.canvas_size
 
         # 归一化边界框
-        normalized_boxes = boxes / torch.tensor([canvas_size[0], canvas_size[1], canvas_size[0], canvas_size[1]])
+        normalized_boxes = out_boxes / torch.tensor([canvas_size[0], canvas_size[1], canvas_size[0], canvas_size[1]])
 
         return out_img, normalized_boxes
 
@@ -53,9 +53,9 @@ class YOLOv1Transform:
 if __name__ == '__main__':
     # 测试代码
     img_dir = 'data/datasets/VOCdevkit/VOC2007/JPEGImages'  # 替换为你的图像目录路径
-    img_file = '000013.jpg'  # 替换为实际的图像文件名
+    img_file = '000001.jpg'  # 替换为实际的图像文件名
     img = read_image(f'{img_dir}/{img_file}').to(torch.float32) / 255
-    boxes = torch.tensor([[16, 1, 225, 170]])  # 示例注释
+    boxes = torch.tensor([[48, 240, 147, 131]])  # 示例注释
 
     # 创建转换对象
     transform = YOLOv1Transform(size=(448, 448))
