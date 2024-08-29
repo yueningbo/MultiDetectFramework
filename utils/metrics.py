@@ -19,7 +19,9 @@ def evaluate_model(model, test_loader, coco_annotation_file, device) -> None:
     model.eval()
     all_predictions = []
 
-    for images, targets, img_ids in test_loader:
+    logging.info("Starting evaluation process.")
+    for batch_idx, (images, targets, img_ids) in enumerate(test_loader):
+        logging.info(f"Processing batch {batch_idx + 1}/{len(test_loader)}")
         images = images.to(device)
         with torch.no_grad():
             outputs = model(images)
@@ -30,15 +32,21 @@ def evaluate_model(model, test_loader, coco_annotation_file, device) -> None:
             all_predictions.extend(predictions)
 
     if all_predictions:
+        logging.info("All predictions generated. Loading ground truth annotations.")
         # Load ground truth and predictions
         coco_gt = COCO(coco_annotation_file)
         coco_dt = coco_gt.loadRes(all_predictions)
 
+        logging.info("Running COCO evaluation.")
         # Perform evaluation
         coco_eval = COCOeval(coco_gt, coco_dt, 'bbox')
         coco_eval.evaluate()
         coco_eval.accumulate()
         coco_eval.summarize()
+
+        logging.info("Evaluation completed successfully.")
+    else:
+        logging.warning("No predictions were generated during evaluation.")
 
 
 def convert_outputs_to_coco_format(output: torch.Tensor, img_id: int, threshold: float = 0.5,
@@ -55,6 +63,7 @@ def convert_outputs_to_coco_format(output: torch.Tensor, img_id: int, threshold:
     Returns:
         List[Dict]: List of predictions in COCO format.
     """
+    logging.debug(f"Converting outputs for image_id {img_id}.")
     predictions = []
     B = 2  # Number of bounding boxes
     grid_size = output.shape[1]
@@ -90,6 +99,7 @@ def convert_outputs_to_coco_format(output: torch.Tensor, img_id: int, threshold:
             # Apply NMS per class
             predictions.extend(apply_nms_per_class(boxes, scores, classes, img_id, nms_threshold))
 
+    logging.debug(f"Converted {len(predictions)} predictions for image_id {img_id}.")
     return predictions
 
 
@@ -108,6 +118,7 @@ def apply_nms_per_class(boxes: List[List[float]], scores: List[float], classes: 
     Returns:
         List[Dict]: List of predictions in COCO format after NMS.
     """
+    logging.debug(f"Applying NMS for image_id {img_id}.")
     predictions = []
     unique_classes = set(classes)
 
@@ -130,4 +141,5 @@ def apply_nms_per_class(boxes: List[List[float]], scores: List[float], classes: 
                     "score": score
                 })
 
+    logging.debug(f"NMS produced {len(predictions)} predictions for image_id {img_id}.")
     return predictions

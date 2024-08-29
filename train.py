@@ -53,21 +53,30 @@ class Trainer:
 
             self.optimizer.zero_grad()
 
-            # 自动选择数据类型
+            # Automatic mixed precision training
             with torch.cuda.amp.autocast(enabled=bool(self.scaler)):
                 outputs = self.model(images)
                 criterion = YoloV1Loss(device=self.device)
                 loss = criterion(outputs, targets)
 
-            # 记录损失信息
+            # Record loss
             writer.add_scalar('Loss/train', loss.item(), global_step=epoch)
 
             if self.scaler is not None:
                 self.scaler.scale(loss).backward()
+
+                # Gradient Clipping
+                self.scaler.unscale_(self.optimizer)  # Unscaling needed for AMP
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
+
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
                 loss.backward()
+
+                # Gradient Clipping
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2.0)
+
                 self.optimizer.step()
 
             total_loss += loss.item()
@@ -93,7 +102,7 @@ class Trainer:
         for epoch in range(self.config['epochs']):
             self.train_epoch(epoch)
 
-            if (epoch + 1) % 2 == 0:
+            if (epoch + 1) % 10 == 0:
                 self.evaluate()
 
             if (epoch + 1) % 10 == 0:
