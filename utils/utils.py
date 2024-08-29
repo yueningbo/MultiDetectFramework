@@ -32,7 +32,7 @@ def compute_iou(box1, box2):
     return iou
 
 
-def print_model_flops(model, input_size):
+def print_model_flops(model, input_size, device):
     """
     打印模型的 FLOPs 和参数量。
 
@@ -41,7 +41,7 @@ def print_model_flops(model, input_size):
     - input_size: 模型输入的尺寸，例如 (3, 224, 224)。
     """
     # 创建一个假的输入张量
-    dummy_input = torch.randn(1, *input_size)
+    dummy_input = torch.randn(1, *input_size).to(device)
 
     # 计算 FLOPs 和参数量
     macs, params = profile(model, inputs=(dummy_input,), verbose=False)
