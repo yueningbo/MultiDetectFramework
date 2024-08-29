@@ -6,8 +6,8 @@ from utils.metrics import evaluate_model
 
 
 def main():
-    config_path = 'configs/yolov1.json'
-    weights_path = 'outputs/yolov1/model_weights.pth'
+    config_path = '../configs/yolov1.json'
+    weights_path = '../outputs/yolov1/model_weights.pth'
     coco_annotation_file = 'data/annotations/instances_val2017.json'  # Path to COCO annotations
 
     # Load configuration

@@ -7,7 +7,7 @@ from data.loaders.dataset_loader import get_loader
 from utils.losses import YoloV1Loss
 from utils.metrics import evaluate_model
 from models.yolov1.yolov1_model import YOLOv1
-from utils.utils import print_model_flops
+from utils.utils import print_model_flops, load_config
 
 from utils.warmup_scheduler import WarmUpScheduler
 
@@ -23,7 +23,7 @@ class Trainer:
                  pretrained_weights_path=None,
                  freeze_backbone_epoch=20,
                  summary_writer_path=None):
-        self.config = self.load_config(config_path)
+        self.config = load_config(config_path)
         self.weights_path = weights_path
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -49,12 +49,6 @@ class Trainer:
         logging.info(f'Configuration loaded from {config_path}')
         logging.info(f'Weights will be saved to {weights_path}')
         logging.info(f'Using device: {self.device}')
-
-    def load_config(self, config_path):
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        logging.info(f'Configuration: {config}')
-        return config
 
     def freeze_backbone(self):
         for param in self.model.backbone.parameters():
@@ -125,8 +119,7 @@ class Trainer:
         # Freeze backbone parameters
         self.freeze_backbone()
         for epoch in range(self.config['epochs']):
-            if epoch >= self.freeze_backbone_epoch:
-                # Unfreeze the backbone after 20 epochs
+            if epoch == self.freeze_backbone_epoch:
                 self.unfreeze_backbone()
 
             self.train_epoch(epoch)
@@ -146,18 +139,18 @@ class Trainer:
 
 
 if __name__ == "__main__":
-    config_path = 'configs/yolov1.json'
+    config_path = '../configs/yolov1.json'
     weights_path = 'outputs/yolov1/model_weights.pth'
     amp = True
-    summary_writer_path = 'outputs/yolov1'
-    pretrained_weights_path = 'outputs/yolov1/model_weights.pth_epoch_20.pth'
+    summary_writer_path = '../outputs/yolov1'
+    pretrained_weights_path = '../outputs/yolov1/model_weights.pth_epoch_20.pth'
     freeze_backbone_epoch = 5
 
     trainer = Trainer(
         config_path, weights_path, amp,
         summary_writer_path=summary_writer_path,
         # pretrained_weights_path=pretrained_weights_path,
-        freeze_backbone_epoch=20
+        freeze_backbone_epoch=freeze_backbone_epoch
     )
 
     trainer.train()

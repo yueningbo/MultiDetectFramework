@@ -1,3 +1,5 @@
+import json
+
 import torch
 from thop import profile
 import logging
@@ -66,33 +68,6 @@ def print_model_flops(model, input_size, device):
     logging.info(f"Model Parameters: {params_readable}")
 
 
-if __name__ == '__main__':
-    # 测试数据
-    pred_boxes = torch.tensor([
-        [0.5, 0.5, 0.2, 0.2],  # box1: [x_center, y_center, width, height]
-        [0.8, 0.8, 0.2, 0.2]
-    ], dtype=torch.float32)
-
-    gt_boxes = torch.tensor([
-        [0.6, 0.6, 0.2, 0.2],
-        [0.7, 0.7, 0.1, 0.1],
-        [0.9, 0.9, 0.2, 0.2]
-    ], dtype=torch.float32)
-
-    # 计算 IoU
-    ious = compute_iou(pred_boxes, gt_boxes)
-
-    # 找到每个预测框与所有真实框之间的最大 IoU 和对应的索引
-    best_iou, best_box_idx = torch.max(ious, dim=1)
-
-    print("IoU Matrix:")
-    print(ious)
-    print("Best IoU for each predicted box:")
-    print(best_iou)
-    print("Index of the best matching ground truth box for each predicted box:")
-    print(best_box_idx)
-
-
 def denormalize(img):
     """
     Reverse the normalization of an image.
@@ -106,3 +81,58 @@ def denormalize(img):
     img = img * std + mean
 
     return img
+
+
+def load_config(config_path):
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    logging.info(f'Configuration: {config}')
+    return config
+
+
+def nms(boxes, scores, threshold):
+    """
+    非极大值抑制算法
+
+    Args:
+        boxes (Tensor): 边界框 [num_boxes, 5]，每个框 [x_center, y_center, w, h, conf]
+        scores (Tensor): 置信度
+        threshold (float): NMS 阈值
+
+    Returns:
+        list: 保留的框的索引列表
+    """
+    if len(boxes) == 0:
+        return []
+
+    x1 = boxes[:, 0] - boxes[:, 2] / 2
+    y1 = boxes[:, 1] - boxes[:, 3] / 2
+    x2 = boxes[:, 0] + boxes[:, 2] / 2
+    y2 = boxes[:, 1] + boxes[:, 3] / 2
+
+    areas = (x2 - x1) * (y2 - y1)
+    sorted_indices = torch.argsort(scores, descending=True)
+
+    keep = []
+    while sorted_indices.size(0) > 0:
+        i = sorted_indices[0]
+        keep.append(i.item())
+
+        if sorted_indices.size(0) == 1:
+            break
+
+        xx1 = torch.max(x1[sorted_indices[1:]], x1[i])
+        yy1 = torch.max(y1[sorted_indices[1:]], y1[i])
+        xx2 = torch.min(x2[sorted_indices[1:]], x2[i])
+        yy2 = torch.min(y2[sorted_indices[1:]], y2[i])
+
+        w = torch.clamp(xx2 - xx1, min=0)
+        h = torch.clamp(yy2 - yy1, min=0)
+        inter = w * h
+
+        union = areas[sorted_indices[1:]] + areas[i] - inter
+        iou = inter / (union + 1e-6)
+
+        sorted_indices = sorted_indices[1:][iou <= threshold]
+
+    return keep
