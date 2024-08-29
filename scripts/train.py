@@ -122,11 +122,10 @@ class Trainer:
             if epoch == self.freeze_backbone_epoch:
                 self.unfreeze_backbone()
 
-            # self.train_epoch(epoch)
+            self.train_epoch(epoch)
 
             if (epoch + 1) % 5 == 0:
                 self.evaluate()
-                return
 
             if (epoch + 1) % 10 == 0:
                 self.save_model_weights(epoch + 1)
@@ -146,7 +145,7 @@ if __name__ == "__main__":
     amp = True
     summary_writer_path = 'outputs/yolov1'
     pretrained_weights_path = 'outputs/yolov1/model_weights.pth_epoch_20.pth'
-    freeze_backbone_epoch = 5
+    freeze_backbone_epoch = 20
 
     trainer = Trainer(
         config_path, weights_path, amp,

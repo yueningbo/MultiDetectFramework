@@ -21,37 +21,32 @@ def evaluate_model(model: torch.nn.Module, test_loader, coco_annotation_file: st
     all_predictions = []
 
     logging.info("Starting evaluation process.")
-    try:
-        for batch_idx, (images, _, img_ids) in enumerate(test_loader):
-            logging.info(f"Processing batch {batch_idx + 1}/{len(test_loader)}")
-            images = images.to(device)
-            outputs = model.inference(images)
+    for batch_idx, (images, _, img_ids) in enumerate(test_loader):
+        logging.info(f"Processing batch {batch_idx + 1}/{len(test_loader)}")
+        images = images.to(device)
+        outputs = model.inference(images)
 
-            # Process each image in the batch
-            for output, img_id in zip(outputs, img_ids):
-                predictions = convert_outputs_to_coco_format(output, img_id)
-                all_predictions.extend(predictions)
+        # Process each image in the batch
+        for output, img_id in zip(outputs, img_ids):
+            predictions = convert_outputs_to_coco_format(output, img_id)
+            all_predictions.extend(predictions)
 
-        if all_predictions:
-            logging.info("All predictions generated. Loading ground truth annotations.")
-            # Load ground truth and predictions
-            coco_gt = COCO(coco_annotation_file)
-            coco_dt = coco_gt.loadRes(all_predictions)
+    if all_predictions:
+        logging.info("All predictions generated. Loading ground truth annotations.")
+        # Load ground truth and predictions
+        coco_gt = COCO(coco_annotation_file)
+        coco_dt = coco_gt.loadRes(all_predictions)
 
-            logging.info("Running COCO evaluation.")
-            # Perform evaluation
-            coco_eval = COCOeval(coco_gt, coco_dt, 'bbox')
-            coco_eval.evaluate()
-            coco_eval.accumulate()
-            coco_eval.summarize()
+        logging.info("Running COCO evaluation.")
+        # Perform evaluation
+        coco_eval = COCOeval(coco_gt, coco_dt, 'bbox')
+        coco_eval.evaluate()
+        coco_eval.accumulate()
+        coco_eval.summarize()
 
-            logging.info("Evaluation completed successfully.")
-        else:
-            logging.warning("No predictions were generated during evaluation.")
-
-    except Exception as e:
-        raise e
-        logging.error(f"An error occurred during evaluation: {(e)}")
+        logging.info("Evaluation completed successfully.")
+    else:
+        logging.warning("No predictions were generated during evaluation.")
 
 
 def convert_outputs_to_coco_format(output: List[List[float]], img_id: int) -> List[Dict]:
@@ -67,7 +62,6 @@ def convert_outputs_to_coco_format(output: List[List[float]], img_id: int) -> Li
     """
     coco_predictions = []
     for detection in output:
-        print(detection)
         x_min, y_min, width, height, class_id, score = detection
         coco_pred = {
             "image_id": img_id,

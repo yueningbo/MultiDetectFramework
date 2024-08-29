@@ -89,17 +89,17 @@ class YOLOv1(nn.Module):
         for row in range(grid_size):
             for col in range(grid_size):
                 cell_output = output[row, col, :]
-                print(f'cell_output.shape:{cell_output.shape}')
                 pred_boxes = cell_output[:self.B * 5].view(self.B, 5)  # [B, 5]
                 pred_classes = cell_output[self.B * 5:]  # [C]
 
                 # Compute class scores
-                scores = pred_boxes[:, 4] * pred_classes  # Confidence score for each class
+                box_scores = pred_boxes[:, 4].unsqueeze(1) * pred_classes.unsqueeze(0)  # [B, C]
+                scores, class_ids = box_scores.max(dim=1)  # [B], [B]
 
                 # Filter boxes by class confidence threshold
                 valid_mask = scores > conf_threshold
                 pred_boxes = pred_boxes[valid_mask]
-                class_ids = pred_classes[valid_mask]
+                class_ids = class_ids[valid_mask]
                 class_scores = scores[valid_mask]
 
                 if len(pred_boxes) == 0:
@@ -113,7 +113,7 @@ class YOLOv1(nn.Module):
                 keep = nms(corners_class_boxes, class_scores, nms_threshold)
 
                 for idx in keep:
-                    box = pred_boxes[idx]
+                    box = pred_boxes[idx].to('cpu').numpy()
                     # Convert coordinates to the original image size
                     box *= self.img_orig_size
                     # Append results (class_id + 1 for background class adjustment)
