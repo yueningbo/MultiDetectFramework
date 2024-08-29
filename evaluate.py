@@ -19,10 +19,10 @@ def main():
     model.load_state_dict(torch.load(weights_path))
 
     # Load test data
-    _, test_loader = get_loader(config, device)
+    _, val_loader = get_loader(config, device)
 
     # Evaluate the model
-    evaluate_model(model, test_loader, coco_annotation_file)
+    evaluate_model(model, val_loader, coco_annotation_file)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 from torchvision.ops import nms
 from typing import List, Dict
+import logging
 
 
 def evaluate_model(model, test_loader, coco_annotation_file, device) -> None:

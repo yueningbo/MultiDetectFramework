@@ -32,7 +32,7 @@ class Trainer:
         self.scheduler = WarmUpScheduler(self.optimizer, warmup_epochs=self.config['warmup_epochs'],
                                          max_lr=self.config['learning_rate'])
 
-        self.train_loader, self.test_loader = get_loader(self.config, self.device)
+        self.train_loader, self.val_loader = get_loader(self.config, self.device)
         logging.info(f'Configuration loaded from {config_path}')
         logging.info(f'Weights will be saved to {weights_path}')
         logging.info(f'Using device: {self.device}')
@@ -74,15 +74,14 @@ class Trainer:
 
             # Log details of the current batch
             if batch_idx % 10 == 0:  # Log every 10 batches
-                logging.info(f'Epoch {epoch + 1}, Batch {batch_idx}, Loss: {loss.item()}')
+                logging.info(f'Epoch {epoch + 1}, Batch {batch_idx}/{len(self.train_loader)}, Loss: {loss.item()}')
 
         avg_loss = total_loss / len(self.train_loader)
         logging.info(f'Epoch {epoch + 1} completed, Average Loss: {avg_loss}')
         return avg_loss
 
     def evaluate(self):
-        logging.info('Starting evaluation')
-        evaluate_model(self.model, self.test_loader, self.config['val_annotation_path'], self.device)
+        evaluate_model(self.model, self.val_loader, self.config['val_annotation_path'], self.device)
 
     def save_model_weights(self, epoch):
         os.makedirs(os.path.dirname(self.weights_path), exist_ok=True)
