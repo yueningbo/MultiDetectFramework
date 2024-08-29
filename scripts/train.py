@@ -73,7 +73,7 @@ class Trainer:
             # Automatic mixed precision training
             with torch.cuda.amp.autocast(enabled=bool(self.scaler)):
                 outputs = self.model(images)
-                criterion = YoloV1Loss(device=self.device)
+                criterion = YoloV1Loss(self.config, device=self.device)
                 loss = criterion(outputs, targets)
 
             # Record loss
@@ -122,10 +122,11 @@ class Trainer:
             if epoch == self.freeze_backbone_epoch:
                 self.unfreeze_backbone()
 
-            self.train_epoch(epoch)
+            # self.train_epoch(epoch)
 
             if (epoch + 1) % 5 == 0:
                 self.evaluate()
+                return
 
             if (epoch + 1) % 10 == 0:
                 self.save_model_weights(epoch + 1)
@@ -139,11 +140,12 @@ class Trainer:
 
 
 if __name__ == "__main__":
-    config_path = '../configs/yolov1.json'
+    os.chdir('../')
+    config_path = 'configs/yolov1.json'
     weights_path = 'outputs/yolov1/model_weights.pth'
     amp = True
-    summary_writer_path = '../outputs/yolov1'
-    pretrained_weights_path = '../outputs/yolov1/model_weights.pth_epoch_20.pth'
+    summary_writer_path = 'outputs/yolov1'
+    pretrained_weights_path = 'outputs/yolov1/model_weights.pth_epoch_20.pth'
     freeze_backbone_epoch = 5
 
     trainer = Trainer(

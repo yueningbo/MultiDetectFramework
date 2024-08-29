@@ -4,9 +4,8 @@ import os
 import torch
 import torch.nn as nn
 import torchvision.models as models
-from torchvision.ops import nms
 
-from utils.utils import center_to_corners
+from utils.utils import center_to_corners, nms
 
 
 class YOLOv1(nn.Module):
@@ -71,44 +70,55 @@ class YOLOv1(nn.Module):
         else:
             logging.error(f"Pretrained weights file not found at {path}. Using initialized weights.")
 
-    def post_process(self, output, conf_threshold=0.5, nms_threshold=0.4):
+    def post_process(self, output: torch.Tensor, conf_threshold=0.5, nms_threshold=0.4):
         """
-        对模型输出进行后处理，主要包括筛选置信度和非极大值抑制 (NMS)
+        Post-processes the model output, including confidence filtering and Non-Maximum Suppression (NMS).
 
         Args:
-            output (Tensor): 模型的输出，形状为 [H, W, C]
-            conf_threshold (float): 置信度阈值
-            nms_threshold (float): 非极大值抑制阈值
+            output (Tensor): Model output of shape [H, W, C].
+            conf_threshold (float): Confidence threshold.
+            nms_threshold (float): NMS threshold.
 
         Returns:
-            list: 处理后的检测结果列表，格式为 [[x_min, y_min, width, height, class_id, confidence], ...]
+            list: Processed detection results as a list of lists,
+                  where each inner list is [[x_min, y_min, width, height, class_id, confidence]].
         """
         grid_size = output.size(0)
         processed_results = []
 
         output = output.view(grid_size * grid_size, -1)  # [grid_size*grid_size, C]
 
-        # 置信度过滤
+        # Confidence filtering
         conf_mask = output[:, 4] > conf_threshold
         output = output[conf_mask]
 
-        # 解析边界框
-        boxes = output[:, :self.B * 5].view(-1, 5)  # [num_boxes, 5]
+        # Parse bounding boxes
 
-        # 进行NMS
+        # Perform NMS
         final_boxes = []
         for class_id in range(self.C):
             class_mask = output[:, self.B * 5 + class_id] > conf_threshold
-            class_boxes = boxes[class_mask]
-            class_scores = output[class_mask, self.B * 5 + class_id]
+
+            # Apply mask to output, filtering only the relevant rows
+            filtered_output = output[class_mask]
+
+            if filtered_output.shape[0] == 0:  # If no boxes pass the threshold, skip to the next class
+                continue
+
+            # Extract bounding boxes for the class
+            class_boxes = filtered_output[:, :self.B * 5].reshape(-1, 5)
+            class_scores = filtered_output[:, self.B * 5 + class_id]
 
             corners_class_boxes = center_to_corners(class_boxes)
             keep = nms(corners_class_boxes, class_scores, nms_threshold)
+
             for idx in keep:
                 box = class_boxes[idx]
-                final_boxes.append([box[0], box[1], box[2], box[3], class_id, class_scores[idx].item()])
+                box *= self.img_orig_size
+                # class_id+1是因为background占了1个位置
+                final_boxes.append([box[0], box[1], box[2], box[3], class_id + 1, class_scores[idx].item()])
 
-        processed_results.append(final_boxes)
+        processed_results.extend(final_boxes)
 
         return processed_results
 
@@ -126,7 +136,7 @@ class YOLOv1(nn.Module):
             list: 每张图像的检测结果列表
         """
         self.eval()
-        images = images.to(next(self.parameters()).device)  # 确保数据在正确的设备上
+        images = images.to(next(self.parameters()).device)  # Ensure the data is on the correct device
         all_results = []
 
         outputs = self(images)

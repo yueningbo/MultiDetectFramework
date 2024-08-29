@@ -90,49 +90,78 @@ def load_config(config_path):
     return config
 
 
-def nms(boxes, scores, threshold):
+def center_to_corners(boxes):
     """
-    非极大值抑制算法
+    Convert bounding boxes from center format [x_center, y_center, w, h]
+    to corner format [xmin, ymin, xmax, ymax].
 
     Args:
-        boxes (Tensor): 边界框 [num_boxes, 5]，每个框 [x_center, y_center, w, h, conf]
-        scores (Tensor): 置信度
-        threshold (float): NMS 阈值
+        boxes (Tensor): Tensor of shape [num_boxes, 4] where each row represents
+                        a bounding box in center format [x_center, y_center, w, h].
 
     Returns:
-        list: 保留的框的索引列表
+        Tensor: Tensor of shape [num_boxes, 4] where each row represents
+                the bounding box in corner format [xmin, ymin, xmax, ymax].
     """
-    if len(boxes) == 0:
-        return []
+    # Extract bounding box parameters
+    x_center, y_center, width, height = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
 
-    x1 = boxes[:, 0] - boxes[:, 2] / 2
-    y1 = boxes[:, 1] - boxes[:, 3] / 2
-    x2 = boxes[:, 0] + boxes[:, 2] / 2
-    y2 = boxes[:, 1] + boxes[:, 3] / 2
+    # Compute corner coordinates
+    xmin = x_center - width / 2
+    ymin = y_center - height / 2
+    xmax = x_center + width / 2
+    ymax = y_center + height / 2
 
-    areas = (x2 - x1) * (y2 - y1)
-    sorted_indices = torch.argsort(scores, descending=True)
+    # Stack the coordinates into a single tensor
+    corners = torch.stack([xmin, ymin, xmax, ymax], dim=1)
+    return corners
 
+
+def nms(boxes, scores, iou_threshold, format="XYHW"):
+    """
+    执行非极大值抑制（NMS）。
+
+    参数:
+    - boxes: 形状为 (N, 4) 的张量，其中 N 是框的数量，每行是一个 [x1, y1, x2, y2] 的边界框。
+    - scores: 形状为 (N,) 的张量，包含每个框的得分。
+    - iou_threshold: 用于决定何时认为两个框重叠的 IoU 阈值。
+
+    返回:
+    - keep: 一个包含应保留的框的索引的张量。
+    """
+    indices = torch.argsort(scores, descending=True)
     keep = []
-    while sorted_indices.size(0) > 0:
-        i = sorted_indices[0]
-        keep.append(i.item())
 
-        if sorted_indices.size(0) == 1:
+    while indices.numel() > 0:
+        current = indices[0]
+        keep.append(current.item())  # 将当前索引添加到保留列表中
+        if indices.numel() == 1:
             break
 
-        xx1 = torch.max(x1[sorted_indices[1:]], x1[i])
-        yy1 = torch.max(y1[sorted_indices[1:]], y1[i])
-        xx2 = torch.min(x2[sorted_indices[1:]], x2[i])
-        yy2 = torch.min(y2[sorted_indices[1:]], y2[i])
+        # 计算 IoU
+        current_box = boxes[current].unsqueeze(0)
+        boxes_left = boxes[indices[1:]]
+        max_xy = torch.min(current_box[:, 2:], boxes_left[:, 2:])
+        min_xy = torch.max(current_box[:, :2], boxes_left[:, :2])
+        inter_wh = torch.clamp(max_xy - min_xy, min=0)
+        inter_area = inter_wh[:, 0] * inter_wh[:, 1]
+        current_area = (current_box[:, 2] - current_box[:, 0]) * (current_box[:, 3] - current_box[:, 1])
+        boxes_left_area = (boxes_left[:, 2] - boxes_left[:, 0]) * (boxes_left[:, 3] - boxes_left[:, 1])
+        union_area = current_area + boxes_left_area - inter_area
+        iou = inter_area / union_area
 
-        w = torch.clamp(xx2 - xx1, min=0)
-        h = torch.clamp(yy2 - yy1, min=0)
-        inter = w * h
+        # 保留 IoU 小于阈值的框
+        indices = indices[(iou < iou_threshold).nonzero(as_tuple=True)[0] + 1]  # 修正索引
 
-        union = areas[sorted_indices[1:]] + areas[i] - inter
-        iou = inter / (union + 1e-6)
+    return torch.tensor(keep)
 
-        sorted_indices = sorted_indices[1:][iou <= threshold]
 
-    return keep
+if __name__ == '__main__':
+    # 示例使用
+    boxes = torch.tensor([[100, 100, 210, 210], [105, 105, 215, 215], [300, 300, 400, 400]], dtype=torch.float32)
+    scores = torch.tensor([0.9, 0.75, 0.6], dtype=torch.float32)
+    iou_threshold = 0.5
+
+    from torchvision.ops import nms as tnms
+
+    assert tnms(boxes, scores, iou_threshold) == nms(boxes, scores, iou_threshold)

@@ -1,5 +1,5 @@
 {
-  "num_classes": 20,
+  "num_classes": 2,
   "num_bounding_boxes": 2,
   "grid_size": 7,
 
