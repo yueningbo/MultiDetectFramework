@@ -69,6 +69,9 @@ def convert_outputs_to_coco_format(output: torch.Tensor, img_id: int, threshold:
     grid_size = output.shape[1]
     output = output.permute(1, 2, 0).contiguous().view(grid_size, grid_size, -1)
 
+    # Dimensions of the image
+    img_width, img_height = 448, 448
+
     for i in range(grid_size):
         for j in range(grid_size):
             grid_cell = output[i, j, :]
@@ -81,16 +84,22 @@ def convert_outputs_to_coco_format(output: torch.Tensor, img_id: int, threshold:
                 confidence = box[4].item()
 
                 if confidence > threshold:
-                    x_center, y_center, w, h = box[:4]
+                    x_min_rel, y_min_rel, w, h = box[:4]
                     class_scores = grid_cell[B * 5:]
                     class_id = torch.argmax(class_scores).item()
                     class_score = class_scores[class_id].item()
 
                     # Compute absolute bounding box coordinates
-                    x_min = (x_center + j / grid_size - w / 2) * 448
-                    y_min = (y_center + i / grid_size - h / 2) * 448
-                    width = w * 448
-                    height = h * 448
+                    x_min_abs = (x_min_rel + j / grid_size) * img_width
+                    y_min_abs = (y_min_rel + i / grid_size) * img_height
+                    width = w * img_width
+                    height = h * img_height
+
+                    # Convert to COCO format
+                    x_min = x_min_abs
+                    y_min = y_min_abs
+                    width = width
+                    height = height
 
                     boxes.append([x_min, y_min, width, height])
                     scores.append(confidence * class_score)

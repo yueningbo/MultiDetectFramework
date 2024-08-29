@@ -13,11 +13,10 @@ from utils.warmup_scheduler import WarmUpScheduler
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-writer = SummaryWriter(log_dir='outputs/yolov1')
 
 
 class Trainer:
-    def __init__(self, config_path, weights_path, amp, freeze_backbone_epoch=20):
+    def __init__(self, config_path, weights_path, amp, freeze_backbone_epoch=20, summary_writer_path=None):
         self.config = self.load_config(config_path)
         self.weights_path = weights_path
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -34,6 +33,7 @@ class Trainer:
 
         self.train_loader, self.val_loader = get_loader(self.config, self.device)
         self.freeze_backbone_epoch = freeze_backbone_epoch
+        self.writer = SummaryWriter(log_dir=summary_writer_path)
 
         logging.info(f'Configuration loaded from {config_path}')
         logging.info(f'Weights will be saved to {weights_path}')
@@ -72,7 +72,7 @@ class Trainer:
                 loss = criterion(outputs, targets)
 
             # Record loss
-            writer.add_scalar('Loss/train', loss.item(), global_step=epoch)
+            self.writer.add_scalar('Loss/train', loss.item(), global_step=epoch)
 
             if self.scaler is not None:
                 self.scaler.scale(loss).backward()
@@ -130,6 +130,7 @@ class Trainer:
             self.scheduler.step()
 
         self.save_model_weights('final')
+        self.writer.close()
         logging.info('Training completed')
 
 
@@ -137,6 +138,6 @@ if __name__ == "__main__":
     config_path = 'configs/yolov1.json'
     weights_path = 'outputs/yolov1/model_weights.pth'
     amp = True
-    trainer = Trainer(config_path, weights_path, amp)
+    summary_writer_path = 'outputs/yolov1'
+    trainer = Trainer(config_path, weights_path, amp, summary_writer_path=summary_writer_path)
     trainer.train()
-    writer.close()
