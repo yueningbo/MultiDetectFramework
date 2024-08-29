@@ -1,36 +1,33 @@
-def evaluate_model(outputs, targets):
-    """
-    Evaluate the model performance.
-    """
+import torch
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
 
-    # Calculate precision and recall
-    true_positives = 0
-    false_positives = 0
-    false_negatives = 0
 
-    for output, target in zip(outputs, targets):
-        pred_boxes = output[:, :4]
-        pred_scores = output[:, 4]
-        pred_labels = output[:, 5:]
+def evaluate_model(model, test_loader, coco_annotation_file, device):
+    model.eval()
+    all_predictions = []
 
-        target_boxes = target[:, :4]
-        target_labels = target[:, 5:]
+    for images, targets, img_file in test_loader:
+        images = images.to(device)
+        with torch.no_grad():
+            outputs = model(images)
+        print(outputs.shape)  # torch.Size([2, 7, 7, 30])
 
-        highest_pred_scores, _ = pred_scores.max(dim=1)
-        highest_pred_labels = pred_labels.argmax(dim=1)
+        # Convert outputs to COCO format
+        predictions = convert_outputs_to_coco_format(outputs, img_file)
+        all_predictions.extend(predictions)
 
-        IoU = bbox_iou(pred_boxes, target_boxes)
+    # Load ground truth and predictions
+    coco_gt = COCO(coco_annotation_file)
+    coco_dt = coco_gt.loadRes(all_predictions)
 
-        for i in range(len(IoU)):
-            if IoU[i].item() > 0.5 and highest_pred_labels[i] == target_labels[i]:
-                true_positives += 1
-            else:
-                false_positives += 1
+    # Perform evaluation
+    coco_eval = COCOeval(coco_gt, coco_dt, 'bbox')
+    coco_eval.evaluate()
+    coco_eval.accumulate()
+    coco_eval.summarize()
 
-        false_negatives = len(target_labels) - true_positives
 
-    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
-    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
-
-    print(f'Precision: {precision:.4f}')
-    print(f'Recall: {recall:.4f}')
+def convert_outputs_to_coco_format(outputs, img_file):
+    # Implement the conversion of outputs to COCO format
+    pass

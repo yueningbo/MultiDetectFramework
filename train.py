@@ -2,7 +2,7 @@ import json
 import os
 import torch
 import logging
-from data.loaders import get_loader
+from data.loaders.dataset_loader import get_loader
 from utils.losses import YoloV1Loss
 from utils.metrics import evaluate_model
 from models.yolov1.yolov1_model import YOLOv1
@@ -19,7 +19,7 @@ class Trainer:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = YOLOv1(self.config['grid_size'], self.config['num_bounding_boxes'], self.config['num_classes']).to(
             self.device)
-        # print_model_flops(self.model, (3, 448, 448), self.device)
+        print_model_flops(self.model, (3, 448, 448), self.device)
         self.scaler = torch.cuda.amp.GradScaler() if amp else None
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.config['learning_rate'],
                                          momentum=self.config['momentum'], weight_decay=self.config['decay'])
@@ -52,10 +52,11 @@ class Trainer:
                 self.optimizer.step()
 
             total_loss += loss.item()
+            break
         return total_loss / len(self.train_loader)
 
     def evaluate(self):
-        return evaluate_model(self.model, self.test_loader)
+        return evaluate_model(self.model, self.test_loader, self.config['val_annotation_path'], self.device)
 
     def save_model_weights(self, epoch):
         os.makedirs(os.path.dirname(self.weights_path), exist_ok=True)
@@ -65,7 +66,7 @@ class Trainer:
         for epoch in range(self.config['epochs']):
             loss = self.train_epoch()
             logging.info(f'Epoch {epoch + 1}/{self.config["epochs"]}, Loss: {loss}')
-            # self.evaluate()
+            self.evaluate()
 
             if (epoch + 1) % 10 == 0:
                 self.save_model_weights(epoch + 1)

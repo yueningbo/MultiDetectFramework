@@ -88,7 +88,6 @@ class YoloV1Loss(nn.Module):
                         loc_loss = self.compute_localization_loss(pred_box, gt_box)
                         conf_loss = self.compute_confidence_loss(pred_conf, best_iou[b], True)
                         class_loss = self.compute_classification_loss(pred_classes, one_hot_gt_classes)
-                        print(loc_loss, conf_loss, class_loss)
 
                         total_loss += loc_loss + conf_loss + class_loss
                     else:  # 该网格不包含目标
