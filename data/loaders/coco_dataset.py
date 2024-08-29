@@ -58,7 +58,7 @@ class COCODataset(Dataset):
             'labels': labels
         }
 
-        return image, targets, file_name
+        return image, targets, img_id
 
 
 if __name__ == '__main__':
