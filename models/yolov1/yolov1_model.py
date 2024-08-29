@@ -33,7 +33,7 @@ class YOLOv1(nn.Module):
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
             nn.BatchNorm2d(512),
             nn.LeakyReLU(0.1),
-            nn.Conv2d(512, (self.C + self.B * 5), kernel_size=1)
+            nn.Conv2d(512, (self.B * 5 + self.C), kernel_size=1)
         )
 
         if pretrained_weights_path:
@@ -81,44 +81,44 @@ class YOLOv1(nn.Module):
 
         Returns:
             list: Processed detection results as a list of lists,
-                  where each inner list is [[x_min, y_min, width, height, class_id, confidence]].
+                  where each inner list is [x_min, y_min, width, height, class_id, confidence].
         """
         grid_size = output.size(0)
         processed_results = []
 
-        output = output.view(grid_size * grid_size, -1)  # [grid_size*grid_size, C]
+        for row in range(grid_size):
+            for col in range(grid_size):
+                cell_output = output[row, col, :]
+                print(f'cell_output.shape:{cell_output.shape}')
+                pred_boxes = cell_output[:self.B * 5].view(self.B, 5)  # [B, 5]
+                pred_classes = cell_output[self.B * 5:]  # [C]
 
-        # Confidence filtering
-        conf_mask = output[:, 4] > conf_threshold
-        output = output[conf_mask]
+                # Compute class scores
+                scores = pred_boxes[:, 4] * pred_classes  # Confidence score for each class
 
-        # Parse bounding boxes
+                # Filter boxes by class confidence threshold
+                valid_mask = scores > conf_threshold
+                pred_boxes = pred_boxes[valid_mask]
+                class_ids = pred_classes[valid_mask]
+                class_scores = scores[valid_mask]
 
-        # Perform NMS
-        final_boxes = []
-        for class_id in range(self.C):
-            class_mask = output[:, self.B * 5 + class_id] > conf_threshold
+                if len(pred_boxes) == 0:
+                    continue
 
-            # Apply mask to output, filtering only the relevant rows
-            filtered_output = output[class_mask]
+                # Adjust the bounding boxes based on cell position
+                pred_boxes[:, 0] += col / grid_size
+                pred_boxes[:, 1] += row / grid_size
 
-            if filtered_output.shape[0] == 0:  # If no boxes pass the threshold, skip to the next class
-                continue
+                corners_class_boxes = center_to_corners(pred_boxes)
+                keep = nms(corners_class_boxes, class_scores, nms_threshold)
 
-            # Extract bounding boxes for the class
-            class_boxes = filtered_output[:, :self.B * 5].reshape(-1, 5)
-            class_scores = filtered_output[:, self.B * 5 + class_id]
-
-            corners_class_boxes = center_to_corners(class_boxes)
-            keep = nms(corners_class_boxes, class_scores, nms_threshold)
-
-            for idx in keep:
-                box = class_boxes[idx]
-                box *= self.img_orig_size
-                # class_id+1是因为background占了1个位置
-                final_boxes.append([box[0], box[1], box[2], box[3], class_id + 1, class_scores[idx].item()])
-
-        processed_results.extend(final_boxes)
+                for idx in keep:
+                    box = pred_boxes[idx]
+                    # Convert coordinates to the original image size
+                    box *= self.img_orig_size
+                    # Append results (class_id + 1 for background class adjustment)
+                    processed_results.append(
+                        [box[0], box[1], box[2], box[3], class_ids[idx].item() + 1, class_scores[idx].item()])
 
         return processed_results
 
@@ -128,7 +128,7 @@ class YOLOv1(nn.Module):
         执行模型推理过程
 
         Args:
-            images (Tensor): 输入图像张量，形状为 [batch_size, C, H, W]
+            images (Tensor): 输入图像张量，形状为 [batch, H, W, C]
             conf_threshold (float): 置信度阈值
             nms_threshold (float): 非极大值抑制阈值
 
