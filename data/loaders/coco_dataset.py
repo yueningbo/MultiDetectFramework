@@ -8,7 +8,7 @@ from pycocotools.coco import COCO
 
 
 # 自定义 collate_fn 函数
-def collate_fn(batch, device):
+def collate_fn(batch, device=None):
     images, targets, filenames = zip(*batch)
     images = torch.stack(images, dim=0).to(device)
     targets = [{k: v.to(device) for k, v in t.items()} for t in targets]  # 将targets中的每个张量转移到device
@@ -38,7 +38,7 @@ class COCODataset(Dataset):
         img_path = os.path.join(self.img_dir, file_name)
         image = read_image(img_path).to(dtype=torch.float32)
 
-        ann_ids = self.coco.getAnnIds(imgIds=[img_id])
+        ann_ids = self.coco.getAnnIds(imgIds=img_id)
         coco_annotation = self.coco.loadAnns(ann_ids)
 
         boxes = []

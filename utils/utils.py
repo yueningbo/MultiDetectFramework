@@ -19,7 +19,7 @@ def bbox_iou(pred_boxes, true_boxes):
     x2 = torch.min(pred_boxes[:, 2].unsqueeze(1), true_boxes[:, 2].unsqueeze(0))
     y2 = torch.min(pred_boxes[:, 3].unsqueeze(1), true_boxes[:, 3].unsqueeze(0))
 
-    inter_area = torch.clamp(x2 - x1, min=0) * torch.clamp(y2 - y1, min=0)
+    inter_area = (x2 - x1) * (y2 - y1)
     union_area = pred_area.unsqueeze(1) + true_area.unsqueeze(0) - inter_area
 
     iou = inter_area / torch.clamp(union_area, min=1e-6)
