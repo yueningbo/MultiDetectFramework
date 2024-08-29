@@ -16,12 +16,23 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 class Trainer:
-    def __init__(self, config_path, weights_path, amp, freeze_backbone_epoch=20, summary_writer_path=None):
+    def __init__(self,
+                 config_path,
+                 weights_path,
+                 amp=False,
+                 pretrained_weights_path=None,
+                 freeze_backbone_epoch=20,
+                 summary_writer_path=None):
         self.config = self.load_config(config_path)
         self.weights_path = weights_path
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.model = YOLOv1(self.config['grid_size'], self.config['num_bounding_boxes'], self.config['num_classes']).to(
-            self.device)
+
+        self.model = YOLOv1(self.config['grid_size'],
+                            self.config['num_bounding_boxes'],
+                            self.config['num_classes'],
+                            pretrained_weights_path=pretrained_weights_path
+                            ).to(self.device)
+
         print_model_flops(self.model, (3, 448, 448), self.device)
         self.scaler = torch.cuda.amp.GradScaler() if amp else None
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.config['learning_rate'],
@@ -120,7 +131,7 @@ class Trainer:
 
             self.train_epoch(epoch)
 
-            if (epoch + 1) % 10 == 0:
+            if (epoch + 1) % 5 == 0:
                 self.evaluate()
 
             if (epoch + 1) % 10 == 0:
@@ -139,5 +150,14 @@ if __name__ == "__main__":
     weights_path = 'outputs/yolov1/model_weights.pth'
     amp = True
     summary_writer_path = 'outputs/yolov1'
-    trainer = Trainer(config_path, weights_path, amp, summary_writer_path=summary_writer_path)
+    pretrained_weights_path = 'outputs/yolov1/model_weights.pth_epoch_20.pth'
+    freeze_backbone_epoch = 5
+
+    trainer = Trainer(
+        config_path, weights_path, amp,
+        summary_writer_path=summary_writer_path,
+        pretrained_weights_path=pretrained_weights_path,
+        freeze_backbone_epoch=5
+    )
+
     trainer.train()

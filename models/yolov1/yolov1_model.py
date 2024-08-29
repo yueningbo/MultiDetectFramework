@@ -1,4 +1,5 @@
 import logging
+import os
 
 import torch
 import torch.nn as nn
@@ -57,3 +58,11 @@ class YOLOv1(nn.Module):
                 # Initialize BatchNorm layers
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+
+    def _load_pretrained_weights(self, path):
+        if os.path.isfile(path):
+            logging.info(f"Loading weights from {path}")
+            state_dict = torch.load(path)
+            self.load_state_dict(state_dict, strict=False)
+        else:
+            logging.error(f"Pretrained weights file not found at {path}. Using initialized weights.")
