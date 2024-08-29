@@ -8,6 +8,7 @@
   "momentum": 0.9,
   "epochs": 100,
   "batch_size": 2,
+  "warmup_epochs": 5,
 
   "img_size": 448,
   "img_dir": "data/datasets/VOCdevkit/VOC2007/JPEGImages",

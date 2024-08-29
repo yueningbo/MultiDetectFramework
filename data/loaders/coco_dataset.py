@@ -25,19 +25,19 @@ class COCODataset(Dataset):
         self.annotation_path = annotation_path
         self.transform = transform
         self.coco = COCO(annotation_path)
-        self.img_files = [img['file_name'] for img in self.coco.loadImgs(self.coco.getImgIds())]
         self.img_ids = self.coco.getImgIds()
         self.cats = {cat['id']: cat['name'] for cat in self.coco.loadCats(self.coco.getCatIds())}
-        self.ids = self.coco.getImgIds()
 
     def __len__(self):
-        return len(self.img_files)
+        return len(self.img_ids)
 
     def __getitem__(self, idx):
-        file_name = self.img_files[idx]
         img_id = self.img_ids[idx]
-        img_path = os.path.join(self.img_dir, file_name)
+        image = self.coco.loadImgs(img_id)[0]
+
+        img_path = os.path.join(self.img_dir, image['file_name'])
         image = read_image(img_path).to(dtype=torch.float32)
+
         # 将图片缩放到[0, 1]
         image /= 255
 

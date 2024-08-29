@@ -2,13 +2,14 @@ import json
 import os
 import torch
 import logging
-
+from torch.utils.tensorboard import SummaryWriter
 from data.loaders.dataset_loader import get_loader
 from utils.losses import YoloV1Loss
 from utils.metrics import evaluate_model
 from models.yolov1.yolov1_model import YOLOv1
 from utils.utils import print_model_flops
-from torch.utils.tensorboard import SummaryWriter
+
+from utils.warmup_scheduler import WarmUpScheduler
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,6 +27,11 @@ class Trainer:
         self.scaler = torch.cuda.amp.GradScaler() if amp else None
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.config['learning_rate'],
                                          momentum=self.config['momentum'], weight_decay=self.config['decay'])
+
+        # Initialize the WarmUpScheduler
+        self.scheduler = WarmUpScheduler(self.optimizer, warmup_epochs=self.config['warmup_epochs'],
+                                         max_lr=self.config['learning_rate'])
+
         self.train_loader, self.test_loader = get_loader(self.config, self.device)
         logging.info(f'Configuration loaded from {config_path}')
         logging.info(f'Weights will be saved to {weights_path}')
@@ -93,6 +99,9 @@ class Trainer:
 
             if (epoch + 1) % 10 == 0:
                 self.save_model_weights(epoch + 1)
+
+            # Update the learning rate
+            self.scheduler.step()
 
         self.save_model_weights('final')
         logging.info('Training completed')
