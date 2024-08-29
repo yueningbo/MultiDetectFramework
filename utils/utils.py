@@ -3,26 +3,32 @@ from thop import profile
 import logging
 
 
-def bbox_iou(pred_boxes, true_boxes):
+def compute_iou(box1, box2):
     """
-    Compute the Intersection over Union (IoU) of two sets of bounding boxes.
-    pred_boxes and true_boxes are of shape (N, 4) where N is the number of boxes.
-    Returns an IoU matrix of shape (N, M) where N is the number of predicted boxes and M is the number of true boxes.
+    计算两个边界框的IoU
+    box1, box2: [x_center, y_center, width, height]
     """
-    # Calculate area of prediction and ground truth boxes
-    pred_area = (pred_boxes[:, 2] - pred_boxes[:, 0]) * (pred_boxes[:, 3] - pred_boxes[:, 1])
-    true_area = (true_boxes[:, 2] - true_boxes[:, 0]) * (true_boxes[:, 3] - true_boxes[:, 1])
+    # 将中心点形式的框转换为左上角和右下角
+    box1_x1, box1_y1 = box1[:, 0] - box1[:, 2] / 2, box1[:, 1] - box1[:, 3] / 2
+    box1_x2, box1_y2 = box1[:, 0] + box1[:, 2] / 2, box1[:, 1] + box1[:, 3] / 2
+    box2_x1, box2_y1 = box2[:, 0] - box2[:, 2] / 2, box2[:, 1] - box2[:, 3] / 2
+    box2_x2, box2_y2 = box2[:, 0] + box2[:, 2] / 2, box2[:, 1] + box2[:, 3] / 2
 
-    # Calculate intersection areas
-    x1 = torch.max(pred_boxes[:, 0].unsqueeze(1), true_boxes[:, 0].unsqueeze(0))
-    y1 = torch.max(pred_boxes[:, 1].unsqueeze(1), true_boxes[:, 1].unsqueeze(0))
-    x2 = torch.min(pred_boxes[:, 2].unsqueeze(1), true_boxes[:, 2].unsqueeze(0))
-    y2 = torch.min(pred_boxes[:, 3].unsqueeze(1), true_boxes[:, 3].unsqueeze(0))
+    # 计算相交区域的坐标
+    inter_x1 = torch.max(box1_x1, box2_x1)
+    inter_y1 = torch.max(box1_y1, box2_y1)
+    inter_x2 = torch.min(box1_x2, box2_x2)
+    inter_y2 = torch.min(box1_y2, box2_y2)
 
-    inter_area = (x2 - x1) * (y2 - y1)
-    union_area = pred_area.unsqueeze(1) + true_area.unsqueeze(0) - inter_area
+    # 计算相交区域的面积
+    inter_area = torch.clamp(inter_x2 - inter_x1, min=0) * torch.clamp(inter_y2 - inter_y1, min=0)
 
-    iou = inter_area / torch.clamp(union_area, min=1e-6)
+    # 计算两个框的面积
+    box1_area = (box1_x2 - box1_x1) * (box1_y2 - box1_y1)
+    box2_area = (box2_x2 - box2_x1) * (box2_y2 - box2_y1)
+
+    # 计算IoU
+    iou = inter_area / (box1_area + box2_area - inter_area + 1e-6)  # 防止除零
     return iou
 
 
