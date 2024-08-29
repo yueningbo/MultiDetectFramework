@@ -4,16 +4,18 @@ import os
 import torch
 import torch.nn as nn
 import torchvision.models as models
+from torchvision.ops import nms
 
-from utils.utils import nms
+from utils.utils import center_to_corners
 
 
 class YOLOv1(nn.Module):
-    def __init__(self, S=7, B=2, C=20, pretrained_weights_path=None):
+    def __init__(self, S=7, B=2, C=20, pretrained_weights_path=None, img_orig_size=448):
         super().__init__()
         self.S = S  # Grid size
         self.B = B  # Number of bounding boxes
         self.C = C  # Number of classes
+        self.img_orig_size = img_orig_size
 
         # Load pretrained MobileNetV2 as the backbone
         mobilenet_v2 = models.mobilenet_v2(pretrained=True)
@@ -79,7 +81,7 @@ class YOLOv1(nn.Module):
             nms_threshold (float): 非极大值抑制阈值
 
         Returns:
-            list: 处理后的检测结果列表，格式为 [[x_min, y_min, x_max, y_max, class_id, confidence], ...]
+            list: 处理后的检测结果列表，格式为 [[x_min, y_min, width, height, class_id, confidence], ...]
         """
         grid_size = output.size(0)
         processed_results = []
@@ -92,7 +94,6 @@ class YOLOv1(nn.Module):
 
         # 解析边界框
         boxes = output[:, :self.B * 5].view(-1, 5)  # [num_boxes, 5]
-        classes = output[:, self.B * 5:]  # [num_boxes, C]
 
         # 进行NMS
         final_boxes = []
@@ -100,7 +101,9 @@ class YOLOv1(nn.Module):
             class_mask = output[:, self.B * 5 + class_id] > conf_threshold
             class_boxes = boxes[class_mask]
             class_scores = output[class_mask, self.B * 5 + class_id]
-            keep = nms(class_boxes, class_scores, nms_threshold)
+
+            corners_class_boxes = center_to_corners(class_boxes)
+            keep = nms(corners_class_boxes, class_scores, nms_threshold)
             for idx in keep:
                 box = class_boxes[idx]
                 final_boxes.append([box[0], box[1], box[2], box[3], class_id, class_scores[idx].item()])
