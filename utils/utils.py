@@ -64,3 +64,45 @@ def print_model_flops(model, input_size, device):
 
     logging.info(f"Model FLOPs: {macs_readable}")
     logging.info(f"Model Parameters: {params_readable}")
+
+
+if __name__ == '__main__':
+    # 测试数据
+    pred_boxes = torch.tensor([
+        [0.5, 0.5, 0.2, 0.2],  # box1: [x_center, y_center, width, height]
+        [0.8, 0.8, 0.2, 0.2]
+    ], dtype=torch.float32)
+
+    gt_boxes = torch.tensor([
+        [0.6, 0.6, 0.2, 0.2],
+        [0.7, 0.7, 0.1, 0.1],
+        [0.9, 0.9, 0.2, 0.2]
+    ], dtype=torch.float32)
+
+    # 计算 IoU
+    ious = compute_iou(pred_boxes, gt_boxes)
+
+    # 找到每个预测框与所有真实框之间的最大 IoU 和对应的索引
+    best_iou, best_box_idx = torch.max(ious, dim=1)
+
+    print("IoU Matrix:")
+    print(ious)
+    print("Best IoU for each predicted box:")
+    print(best_iou)
+    print("Index of the best matching ground truth box for each predicted box:")
+    print(best_box_idx)
+
+
+def denormalize(img):
+    """
+    Reverse the normalization of an image.
+
+    img (Tensor): The input image tensor with normalized values.
+    """
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+
+    # Reverse the normalization
+    img = img * std + mean
+
+    return img

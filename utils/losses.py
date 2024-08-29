@@ -66,15 +66,9 @@ class YoloV1Loss(nn.Module):
                 pred_boxes = cell_outputs[:self.B * 5].view(self.B, 5)
                 pred_classes = cell_outputs[self.B * 5:]  # torch.Size([20])
 
-                # 找出与每个预测框重叠度最高的真实框
-                best_iou = torch.zeros(self.B).to(self.device)
-                best_box_idx = -torch.ones(self.B, dtype=torch.int8).to(self.device)
-
                 # Compute IoU for each predicted box
-                for b in range(self.B):
-                    pred_box = pred_boxes[b, :4]
-                    ious = compute_iou(pred_box.unsqueeze(0), gt_boxes)
-                    best_iou[b], best_box_idx[b] = torch.max(ious, dim=0)
+                ious = compute_iou(pred_boxes, gt_boxes)
+                best_iou, best_box_idx = torch.max(ious, dim=1)
 
                 for b in range(self.B):
                     if best_iou[b] > 0:  # 存在匹配的真实框

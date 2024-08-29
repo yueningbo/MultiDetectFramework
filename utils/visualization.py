@@ -1,15 +1,14 @@
 import matplotlib.pyplot as plt
 import torch
 from matplotlib import patches
+from utils.utils import denormalize
 
 
-def visualize_prediction(image, target, img_file):
-    mean = torch.tensor([0.485, 0.456, 0.406])
-    std = torch.tensor([0.229, 0.224, 0.225])
-    image = image * std[:, None, None] + mean[:, None, None]
-    image = image.to(torch.int32)
+def visualize_prediction(image, target, img_id):
 
-    print(f"Visualizing predictions for image: {img_file}")
+    image = denormalize(image)
+
+    print("img_shape:", image.shape)
     image = image.permute(1, 2, 0)  # 从 (C, H, W) 转换为 (H, W, C)
     image = image.numpy()  # 转换为 numpy 数组
     plt.imshow(image)
@@ -29,7 +28,7 @@ def visualize_prediction(image, target, img_file):
         ax.add_patch(rect)
         ax.text(x_min, y_min, f'Class: {labels[i]}', bbox=dict(facecolor='white', alpha=0.5))
 
-    plt.title(f"Image: {img_file}")
+    plt.title(f"Image: {img_id}")
     plt.show()
 
 

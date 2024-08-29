@@ -5,6 +5,7 @@ from torchvision.io import read_image
 from data.transforms.transform import YOLOv1Transform
 from utils.visualization import visualize_predictions
 from pycocotools.coco import COCO
+from torchvision.transforms.functional import to_tensor
 
 
 # 自定义 collate_fn 函数
@@ -37,6 +38,8 @@ class COCODataset(Dataset):
         img_id = self.img_ids[idx]
         img_path = os.path.join(self.img_dir, file_name)
         image = read_image(img_path).to(dtype=torch.float32)
+        # 将图片缩放到[0, 1]
+        image /= 255
 
         ann_ids = self.coco.getAnnIds(imgIds=img_id)
         coco_annotation = self.coco.loadAnns(ann_ids)
@@ -66,11 +69,11 @@ if __name__ == '__main__':
     annotation_dir = r'data/datasets/VOCdevkit/VOC2007/test.json'
     transform = YOLOv1Transform()
     dataset = COCODataset(img_dir, annotation_dir, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=collate_fn)
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=collate_fn)
 
-    for i, (images, targets, img_file) in enumerate(dataloader):
+    for i, (images, targets, img_id) in enumerate(dataloader):
         print(f"Batch {i + 1}:")
         print(f"  Image batch size: {len(images)}")  # 打印图像的批次大小
         print(f"  Targets batch size: {len(targets)}")  # 打印Boxes的批次大小
 
-        visualize_predictions(images, targets, img_file)
+        visualize_predictions(images, targets, img_id)
