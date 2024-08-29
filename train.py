@@ -52,7 +52,6 @@ class Trainer:
                 self.optimizer.step()
 
             total_loss += loss.item()
-            break
         return total_loss / len(self.train_loader)
 
     def evaluate(self):
