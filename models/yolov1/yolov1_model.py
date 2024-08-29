@@ -15,7 +15,8 @@ class YOLOv1(nn.Module):
 
         # Use MobileNetV2 up to the penultimate layer
         self.backbone = nn.Sequential(
-            *list(mobilenet_v2.features.children())  # Keep all layers
+            *list(mobilenet_v2.features.children()),  # Keep all layers
+            nn.AdaptiveAvgPool2d((self.S, self.S))  # Adjust to SxS grid
         )
 
         # Reduce the number of output channels to make it simpler
@@ -26,15 +27,19 @@ class YOLOv1(nn.Module):
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
             nn.BatchNorm2d(512),
             nn.LeakyReLU(0.1),
-            nn.Conv2d(512, self.S * self.S * (self.C + self.B * 5), kernel_size=1)
+            nn.Conv2d(512, (self.C + self.B * 5), kernel_size=1)
         )
 
     def forward(self, x):
         x = self.backbone(x)
         x = self.conv_layers(x)
-        x = x.view(-1, self.S, self.S, self.C + self.B * 5)
+
+        # [batch, C, H, W] -> [batch, H, W, C]
+        x = x.permute(0, 2, 3, 1).contiguous()
         return x
 
-# Example usage
-# model = YOLOv1(S=7, B=2, C=20)
-# print(model)
+
+if __name__ == '__main__':
+    # Example usage
+    model = YOLOv1(S=7, B=2, C=20)
+    print(model)

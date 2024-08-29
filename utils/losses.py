@@ -11,7 +11,6 @@ class YoloV1Loss(nn.Module):
         self.C = C  # 类别数量
         self.lambda_coord = lambda_coord  # 定位损失的权重
         self.lambda_noobj = lambda_noobj  # 没有物体时置信度损失的权重
-
         self.device = device
 
     def compute_localization_loss(self, pred_box, gt_box):
@@ -40,19 +39,23 @@ class YoloV1Loss(nn.Module):
 
     def forward(self, outputs, targets):
         """
-        outputs.shape:
-        torch.Size([392, 7, 7, 30])
-        targets:
-        [{'boxes': tensor([[0.5357, 0.0022, 0.5804, 0.7411],
-        [0.0045, 0.0022, 0.6786, 0.7411]], device='cuda:0'), 'labels': tensor([2, 2], device='cuda:0')}, {'boxes': tensor([[0.0335, 0.1674, 1.0268, 0.7522],
-        [0.2098, 0.0915, 0.7656, 0.4397]], device='cuda:0'), 'labels': tensor([1, 1], device='cuda:0')}]
+        outputs.shape: [batch, H, W, C]
+        targets: [{
+            'boxes': tensor([[X,Y,H,W],...]),
+            'label':tensor([class_label,...])
+            },...]
         """
-        batch_size = len(targets)
+        batch_size = outputs.size(0)
         total_loss = 0
 
         for i in range(batch_size):
             target = targets[i]
             output = outputs[i]
+
+            # 提取目标框和类别
+            gt_boxes = target['boxes']
+            gt_classes = target['labels']  # tensor([2], device='cuda:0')
+            one_hot_gt_classes = self.convert_to_one_hot(gt_classes, num_classes=self.C)
 
             for cell in range(self.S * self.S):
                 row = cell // self.S
@@ -63,32 +66,32 @@ class YoloV1Loss(nn.Module):
                 pred_boxes = cell_outputs[:self.B * 5].view(self.B, 5)
                 pred_classes = cell_outputs[self.B * 5:]  # torch.Size([20])
 
-                # 提取目标框和类别
-                gt_boxes = target['boxes']
-                gt_classes = target['labels']  # tensor([2], device='cuda:0')
-                one_hot_gt_classes = self.convert_to_one_hot(gt_classes, num_classes=self.C)
-
                 # 找出与每个预测框重叠度最高的真实框
-                best_iou = 0
-                best_box_idx = -1
-                for j in range(len(gt_boxes)):
-                    iou = compute_iou(pred_boxes[:, :4], gt_boxes[j:j + 1])
-                    if iou.max() > best_iou:
-                        best_iou = iou.max()
-                        best_box_idx = j
+                best_iou = torch.zeros(self.B).to(self.device)
+                best_box_idx = -torch.ones(self.B, dtype=torch.int8).to(self.device)
 
-                if best_box_idx >= 0:  # 存在匹配的真实框
-                    gt_box = gt_boxes[best_box_idx]
-                    pred_box = pred_boxes[best_box_idx]
+                # Compute IoU for each predicted box
+                for b in range(self.B):
+                    pred_box = pred_boxes[b, :4]
+                    ious = compute_iou(pred_box.unsqueeze(0), gt_boxes)
+                    best_iou[b], best_box_idx[b] = torch.max(ious, dim=0)
 
-                    # 计算各个损失
-                    loc_loss = self.compute_localization_loss(pred_box, gt_box)
-                    conf_loss = self.compute_confidence_loss(pred_box[4], best_iou, True)
-                    class_loss = self.compute_classification_loss(pred_classes, one_hot_gt_classes)
+                for b in range(self.B):
+                    if best_iou[b] > 0:  # 存在匹配的真实框
+                        gt_box_idx = best_box_idx[b]
+                        gt_box = gt_boxes[gt_box_idx]
+                        pred_box = pred_boxes[b]
+                        # 预测的置信度
+                        pred_conf = pred_box[4]
 
-                    total_loss += loc_loss + conf_loss + class_loss
-                else:  # 该网格不包含目标
-                    for b in range(self.B):
+                        # 计算各个损失
+                        loc_loss = self.compute_localization_loss(pred_box, gt_box)
+                        conf_loss = self.compute_confidence_loss(pred_conf, best_iou[b], True)
+                        class_loss = self.compute_classification_loss(pred_classes, one_hot_gt_classes)
+                        print(loc_loss, conf_loss, class_loss)
+
+                        total_loss += loc_loss + conf_loss + class_loss
+                    else:  # 该网格不包含目标
                         no_obj_conf_loss = self.compute_confidence_loss(pred_boxes[b, 4], 0, False)
                         total_loss += no_obj_conf_loss
 
