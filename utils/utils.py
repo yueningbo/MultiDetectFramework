@@ -119,39 +119,21 @@ def nms(boxes: torch.Tensor, scores, iou_threshold):
     返回:
     - keep: 一个包含应保留的框的索引的张量。
     """
-    # Coordinates of bounding boxes
-    x1 = boxes[:, 0]
-    y1 = boxes[:, 1]
-    x2 = boxes[:, 2]
-    y2 = boxes[:, 3]
-
-    # Compute the area of the bounding boxes
-    areas = (x2 - x1 + 1) * (y2 - y1 + 1)
     # Sort the bounding boxes by scores in descending order
-    _, order = scores.sort(0, descending=True)
+    order = scores.argsort(descending=True)
     keep = []
 
-    while order.dim() > 0:
+    while order.numel() > 0:
         i = order[0]
         keep.append(i)
+        if order.numel() == 1:
+            break
 
-        # Compute IoU of the kept box with the remaining boxes
-        xx1 = torch.max(x1[i], x1[order[1:]])
-        yy1 = torch.max(y1[i], y1[order[1:]])
-        xx2 = torch.min(x2[i], x2[order[1:]])
-        yy2 = torch.min(y2[i], y2[order[1:]])
+        iou = compute_iou(boxes[order[1:]], boxes[i].unsqueeze(0))
 
-        w = (xx2 - xx1 + 1).clamp(min=0)
-        h = (yy2 - yy1 + 1).clamp(min=0)
-        inter = w * h
+        order = order[1:][iou.squeeze() <= iou_threshold]
 
-        iou = inter / (areas[i] + areas[order[1:]] - inter)
-
-        # Keep only boxes with IoU less than the threshold
-        inds = (iou <= iou_threshold).nonzero(as_tuple=False).squeeze()
-        order = order[inds + 1]
-
-    return torch.tensor(keep)
+    return torch.tensor(keep, dtype=torch.int64)
 
 
 if __name__ == '__main__':
