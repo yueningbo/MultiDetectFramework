@@ -33,7 +33,7 @@ class YOLOv1(nn.Module):
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
             nn.BatchNorm2d(512),
             nn.LeakyReLU(0.1),
-            nn.Conv2d(512, (self.B * 5 + self.C), kernel_size=1)
+            nn.Conv2d(512, (self.B * 5 + self.C), kernel_size=1),
         )
 
         if pretrained_weights_path:
@@ -48,6 +48,7 @@ class YOLOv1(nn.Module):
 
         # [batch, C, H, W] -> [batch, H, W, C]
         x = x.permute(0, 2, 3, 1).contiguous()
+
         return x
 
     def _initialize_weights(self):
@@ -70,60 +71,46 @@ class YOLOv1(nn.Module):
         else:
             logging.error(f"Pretrained weights file not found at {path}. Using initialized weights.")
 
-    def post_process(self, output: torch.Tensor, conf_threshold=0.5, nms_threshold=0.4):
+    def post_process(self, bboxes, scores, conf_thresh, nms_thresh):
         """
-        Post-processes the model output, including confidence filtering and Non-Maximum Suppression (NMS).
-
-        Args:
-            output (Tensor): Model output of shape [H, W, C].
-            conf_threshold (float): Confidence threshold.
-            nms_threshold (float): NMS threshold.
-
-        Returns:
-            list: Processed detection results as a list of lists,
-                  where each inner list is [x_min, y_min, width, height, class_id, confidence].
+        根据得分获取预测的类别标签
+        然后进行阈值筛选
+        再按类别进行非极大值抑制
+        :param bboxes: 形状为[H, W, B]
+        :param scores: 形状为[H, W, C]
+        :param conf_thresh: 置信度阈值
+        :param nms_thresh: 非极大值抑制阈值
+        :return: bboxes, scores, labels
         """
-        grid_size = output.size(0)
-        processed_results = []
+        bboxes = bboxes.view(-1, 4)  # Flatten to [N, 4]
+        scores = scores.view(-1, self.C)  # Flatten to [N, C]
 
-        for row in range(grid_size):
-            for col in range(grid_size):
-                cell_output = output[row, col, :]
-                pred_boxes = cell_output[:self.B * 5].view(self.B, 5)  # [B, 5]
-                pred_classes = cell_output[self.B * 5:]  # [C]
+        # Apply confidence threshold
+        conf_mask = scores.max(dim=-1)[0] > conf_thresh
+        bboxes, scores = bboxes[conf_mask], scores[conf_mask]
 
-                # Compute class scores
-                box_scores = pred_boxes[:, 4].unsqueeze(1) * pred_classes.unsqueeze(0)  # [B, C]
-                scores, class_ids = box_scores.max(dim=1)  # [B], [B]
+        # Convert center format to corner format
+        bboxes = center_to_corners(bboxes)
 
-                # Filter boxes by class confidence threshold
-                valid_mask = scores > conf_threshold
-                pred_boxes = pred_boxes[valid_mask]
-                class_ids = class_ids[valid_mask]
-                class_scores = scores[valid_mask]
+        all_bboxes, all_scores, all_labels = [], [], []
+        for class_idx in range(self.C):
+            class_scores = scores[:, class_idx]
+            class_bboxes = bboxes
 
-                if len(pred_boxes) == 0:
-                    continue
+            # Apply NMS per class
+            keep = nms(class_bboxes, class_scores, nms_thresh)
+            all_bboxes.append(class_bboxes[keep])
+            all_scores.append(class_scores[keep])
+            all_labels.extend([class_idx] * len(keep))
 
-                # Adjust the bounding boxes based on cell position
-                pred_boxes[:, 0] += col / grid_size
-                pred_boxes[:, 1] += row / grid_size
+        if len(all_bboxes) > 0:
+            all_bboxes = torch.cat(all_bboxes, dim=0)
+            all_scores = torch.cat(all_scores, dim=0)
 
-                corners_class_boxes = center_to_corners(pred_boxes)
-                keep = nms(corners_class_boxes, class_scores, nms_threshold)
-
-                for idx in keep:
-                    box = pred_boxes[idx].to('cpu').numpy()
-                    # Convert coordinates to the original image size
-                    box *= self.img_orig_size
-                    # Append results (class_id + 1 for background class adjustment)
-                    processed_results.append(
-                        [box[0], box[1], box[2], box[3], class_ids[idx].item() + 1, class_scores[idx].item()])
-
-        return processed_results
+        return all_bboxes, all_scores, all_labels
 
     @torch.no_grad()
-    def inference(self, images, conf_threshold=0.5, nms_threshold=0.4):
+    def inference(self, images, conf_thresh=0.5, nms_thresh=0.4):
         """
         执行模型推理过程
 
@@ -133,16 +120,17 @@ class YOLOv1(nn.Module):
             nms_threshold (float): 非极大值抑制阈值
 
         Returns:
-            list: 每张图像的检测结果列表
+            list: [(bboxes, scores, labels),...]
         """
-        self.eval()
-        images = images.to(next(self.parameters()).device)  # Ensure the data is on the correct device
-        all_results = []
-
         outputs = self(images)
+        bboxes, scores, labels = [], [], []
         for i in range(images.size(0)):
-            output = outputs[i]
-            processed_results = self.post_process(output, conf_threshold, nms_threshold)
-            all_results.append(processed_results)
+            output = outputs[i]  # [H, W, (B*5 + C)]
+            bboxes_i = output[..., :self.B * 4].view(self.S, self.S, self.B, 4)
+            scores_i = output[..., self.B * 5:]
+            bboxes_i, scores_i, labels_i = self.post_process(bboxes_i, scores_i, conf_thresh, nms_thresh)
+            bboxes.append(bboxes_i)
+            scores.append(scores_i)
+            labels.append(labels_i)
 
-        return all_results
+        return list(zip(bboxes, scores, labels))
