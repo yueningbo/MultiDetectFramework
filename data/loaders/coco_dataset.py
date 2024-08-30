@@ -47,7 +47,8 @@ class COCODataset(Dataset):
         labels = []
         for ann in coco_annotation:
             boxes.append(ann['bbox'])
-            labels.append(ann['category_id'])
+            # 需要考虑background，图集中的category_id是从1开始
+            labels.append(ann['category_id'] - 1)
 
         boxes = torch.tensor(boxes, dtype=torch.float32).view(-1, 4)
         labels = torch.tensor(labels, dtype=torch.int64)

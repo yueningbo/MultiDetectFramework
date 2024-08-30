@@ -5,11 +5,11 @@ import torch
 import torch.nn as nn
 
 from models.yolov1.backbone import Darknet
-from utils.utils import center_to_corners, nms
+from utils.utils import nms, xywh_to_xyxy
 
 
 class YOLOv1(nn.Module):
-    def __init__(self, grid_size=7, num_classes=20, num_bounding_boxes=2, img_orig_size=448,
+    def __init__(self, grid_size=7, num_bounding_boxes=2, num_classes=2, img_orig_size=448,
                  pretrained_weights_path=None):
         super().__init__()
 
@@ -18,7 +18,7 @@ class YOLOv1(nn.Module):
         self.C = num_classes  # Number of classes
         self.img_orig_size = img_orig_size  # Original image size
 
-        self.darknet = Darknet()
+        self.backbone = Darknet()
 
         self.fc = nn.Sequential(
             nn.Flatten(),
@@ -34,7 +34,7 @@ class YOLOv1(nn.Module):
             self._initialize_weights()
 
     def forward(self, x):
-        x = self.darknet(x)
+        x = self.backbone(x)
         x = self.fc(x)
         x = x.view(-1, 7, 7, 5 * self.B + self.C)
         return x
@@ -80,70 +80,72 @@ class YOLOv1(nn.Module):
         decoded_bboxes = torch.stack([bx, by, bw, bh], dim=-1)
         return decoded_bboxes
 
-    def post_process(self, bboxes, scores, conf_thresh, nms_thresh):
-        """
-        根据得分获取预测的类别标签，然后进行阈值筛选，再按类别进行非极大值抑制。
-
-        Args:
-            bboxes (Tensor): 形状为[H, W, B, 5]
-            scores (Tensor): 形状为[H, W, C]
-            conf_thresh (float): 置信度阈值
-            nms_thresh (float): 非极大值抑制阈值
-
-        Returns:
-            tuple: bboxes, scores, labels
-        """
-        bboxes = self.decode_boxes(bboxes, self.S, self.img_orig_size)
-        bboxes = bboxes.view(-1, self.B, 4)
-        scores = scores.view(-1, self.C)
-
-        max_scores, _ = scores.max(dim=-1)
-        conf_mask = max_scores > conf_thresh
-        scores = scores[conf_mask]
-        bboxes = bboxes[conf_mask].view(-1, 4)
-        bboxes = center_to_corners(bboxes)
-
-        all_bboxes, all_scores, all_labels = [], [], []
-        for class_idx in range(self.C):
-            class_scores = scores[:, class_idx]
-            class_bboxes = bboxes
-
-            keep = nms(class_bboxes, class_scores, nms_thresh)
-            all_bboxes.append(class_bboxes[keep])
-            all_scores.append(class_scores[keep])
-            all_labels.extend([class_idx + 1] * len(keep))
-
-        if len(all_bboxes) > 0:
-            all_bboxes = torch.cat(all_bboxes, dim=0)
-            all_scores = torch.cat(all_scores, dim=0)
-        else:
-            all_bboxes = torch.empty((0, 4), device=next(self.parameters()).device)
-            all_scores = torch.empty((0,), device=next(self.parameters()).device)
-
-        return all_bboxes, all_scores, all_labels
-
     @torch.no_grad()
-    def inference(self, images, conf_thresh=0.5, nms_thresh=0.4):
+    def inference(self, images, conf_threshold=0.5, nms_threshold=0.4):
         """
-        执行模型推理过程。
+        Perform inference on a batch of images.
 
         Args:
-            images (Tensor): 输入图像张量，形状为 [batch, H, W, C]
-            conf_thresh (float): 置信度阈值
-            nms_thresh (float): 非极大值抑制阈值
+            images (Tensor): Batch of images, shape [N, 3, H, W]
+            conf_threshold (float): Confidence threshold for filtering boxes
+            nms_threshold (float): IoU threshold for non-maximum suppression
 
         Returns:
-            list: [(bboxes, scores, labels),...]
+            list of tuples: Each tuple contains (bboxes, scores, labels) for an image
         """
-        outputs = self(images)
-        bboxes, scores, labels = [], [], []
-        for i in range(images.size(0)):
-            output = outputs[i]
-            bboxes_i = output[..., :self.B * 5].view(self.S, self.S, self.B, 5)  # 形状为[H, W, B, 5]
-            scores_i = output[..., self.B * 5:]  # 形状为[H, W, C]
-            bboxes_i, scores_i, labels_i = self.post_process(bboxes_i, scores_i, conf_thresh, nms_thresh)
-            bboxes.append(bboxes_i)
-            scores.append(scores_i)
-            labels.append(labels_i)
+        self.eval()
+        outputs = self.forward(images)
+        batch_size = outputs.size(0)
+        results = []
 
-        return list(zip(bboxes, scores, labels))
+        for i in range(batch_size):
+            output = outputs[i]
+
+            # [S, S, B, 4], [S, S, B], [S, S, C]
+            bboxes, confidences, class_probs = self._process_output(output)
+
+            confidences = confidences.unsqueeze(-1)  # (S, S, B, 1)
+            class_probs = class_probs.unsqueeze(2)  # (S, S, 1, C)
+            scores = confidences * class_probs  # (S, S, B, C)
+
+            scores, labels = torch.max(scores, dim=-1)  # [S, S, B]
+            mask = confidences > conf_threshold  # [S, S, B]
+            bboxes = bboxes[mask]  # 一维
+            scores = scores[mask]
+            labels = labels[mask]
+
+            bboxes = xywh_to_xyxy(bboxes)
+            keep = nms(bboxes, scores, nms_threshold)
+
+            bboxes = bboxes[keep]
+            scores = scores[keep]
+            labels = labels[keep]
+
+            results.append((bboxes, scores, labels))
+
+        return results
+
+    def _process_output(self, output):
+        """
+        Process the raw output from the model.
+
+        Args:
+            output (Tensor): Raw output from the model, shape [S, S, B*5 + C]
+
+        Returns:
+            tuple: Processed bounding boxes, confidences, and class probabilities
+        """
+        S, B = self.S, self.B
+        bboxes_output = output[..., :B * 5]  # [S, S, B*5]
+        class_probs = output[..., B * 5:]  # [S, S, C]
+
+        # Reshape the output tensor to separate bounding boxes and class probabilities
+        bboxes_output = bboxes_output.view(S, S, B, 5)  # [S, S, B, 5]
+
+        # Extract bounding boxes and confidences
+        bboxes = bboxes_output[..., :4]
+        confidences = bboxes_output[..., 4]  # [S, S, B]
+
+        bboxes = self.decode_boxes(bboxes, self.S, self.img_orig_size)
+
+        return bboxes, confidences, class_probs

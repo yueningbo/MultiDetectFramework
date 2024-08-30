@@ -89,34 +89,25 @@ def load_config(config_path):
     return config
 
 
-def center_to_corners(boxes):
+def xywh_to_xyxy(boxes):
     """
-    Convert bounding boxes from center format [x_center, y_center, w, h]
+    Convert bounding boxes from format [xmin, ymin, w, h]
     to corner format [xmin, ymin, xmax, ymax].
 
     Args:
         boxes (Tensor): Tensor of shape [num_boxes, 4] where each row represents
-                        a bounding box in center format [x_center, y_center, w, h].
+                        a bounding box in format [xmin, ymin, w, h].
 
     Returns:
         Tensor: Tensor of shape [num_boxes, 4] where each row represents
                 the bounding box in corner format [xmin, ymin, xmax, ymax].
     """
-    # Extract bounding box parameters
-    x_center, y_center, width, height = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
-
-    # Compute corner coordinates
-    xmin = x_center - width / 2
-    ymin = y_center - height / 2
-    xmax = x_center + width / 2
-    ymax = y_center + height / 2
-
-    # Stack the coordinates into a single tensor
-    corners = torch.stack([xmin, ymin, xmax, ymax], dim=1)
+    # Compute corner coordinates directly using tensor operations
+    corners = torch.cat((boxes[:, :2], boxes[:, :2] + boxes[:, 2:]), dim=1)
     return corners
 
 
-def nms(boxes, scores, iou_threshold, format="XYHW"):
+def nms(boxes, scores, iou_threshold):
     """
     执行非极大值抑制（NMS）。
 

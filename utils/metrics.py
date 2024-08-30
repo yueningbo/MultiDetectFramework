@@ -4,8 +4,7 @@ from pycocotools.cocoeval import COCOeval
 import logging
 
 
-def evaluate_model(model: torch.nn.Module, test_loader, coco_annotation_file: str,
-                   device: torch.device) -> None:
+def evaluate_model(model: torch.nn.Module, test_loader, coco_annotation_file: str, device: torch.device) -> None:
     """
     Evaluate the model using the COCO dataset and compute metrics.
 

@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils import compute_iou
+from utils.utils import compute_iou
 
 
 class YOLOv1Loss(nn.Module):
-    def __init__(self, S=7, B=2, C=20, lambda_coord=5, lambda_noobj=0.5):
+    def __init__(self, S=7, B=2, C=3, lambda_coord=5, lambda_noobj=0.5):
         super().__init__()
         self.S = S  # Grid size
         self.B = B  # Number of bounding boxes per cell
@@ -14,15 +14,14 @@ class YOLOv1Loss(nn.Module):
         self.lambda_noobj = lambda_noobj
 
     def forward(self, pred, target):
-        boxes, labels = target['boxes'], target['labels']
-        converted_target = self.convert_to_yolo_format(boxes, labels)
+        converted_target = self.convert_to_yolo_format(target)
         self.loss_compute(pred, converted_target)
 
     def loss_compute(self, pred, target):
         """ Compute loss for YOLO training.
         Args:
-            pred: (Tensor) predictions, sized [n_batch, S, S, Bx5+C], 5=len([x, y, w, h, conf]).
-            target: (Tensor) targets, sized [n_batch, S, S, Bx5+C].
+            pred: (Tensor) predictions, sized [batch_size, S, S, Bx5+C], 5=len([x, y, w, h, conf]).
+            target: (Tensor) targets, sized [batch_size, S, S, Bx5+C].
         Returns:
             (Tensor): loss, sized [1, ].
         """
@@ -107,7 +106,7 @@ class YOLOv1Loss(nn.Module):
 
         return loss
 
-    def convert_to_yolo_format(self, boxes, labels):
+    def convert_to_yolo_format(self, targets):
         """
         将目标框和标签转换为 YOLO 损失函数所需的格式。
 
@@ -115,27 +114,34 @@ class YOLOv1Loss(nn.Module):
             boxes (Tensor): 边界框，形状为 [N, 4]，其中 N 是边界框的数量。
             labels (Tensor): 标签，形状为 [N]。
         Returns:
-            target (Tensor): 转换后的目标张量，形状为 [S, S, B * 5 + C]。
+            target (Tensor): 转换后的目标张量，形状为 [batch_size, S, S, B * 5 + C]。
         """
-        S = self.config['grid_size']
-        B = self.config['num_bounding_boxes']
-        C = self.config['num_classes']
+        S = self.S
+        B = self.B
+        C = self.C
 
-        target = torch.zeros((S, S, B * 5 + C))
+        batch_size = len(targets)
 
-        for box, label in zip(boxes, labels):
-            x_min, y_min, width, height = box
 
-            cell_x = int(x_min * S)
-            cell_y = int(y_min * S)
-            x_center_cell = x_min * S - cell_x
-            y_center_cell = y_min * S - cell_y
+        print((batch_size, S, S, B * 5 + C))
+        converted_target = torch.zeros((batch_size, S, S, B * 5 + C))
 
-            for b in range(B):
-                target[cell_y, cell_x, b * 5: b * 5 + 5] = torch.tensor(
-                    [x_center_cell, y_center_cell, width, height, 1])
+        for bi in range(batch_size):
+            boxes = targets['boxes']
+            labels = targets['labels']
+            for box, label in zip(boxes, labels):
+                x_min, y_min, width, height = box
 
-            target[cell_y, cell_x, B * 5 + label] = 1
+                cell_x = int(x_min * S)
+                cell_y = int(y_min * S)
+                x_center_cell = x_min * S - cell_x
+                y_center_cell = y_min * S - cell_y
+
+                for b in range(B):
+                    converted_target[bi, cell_y, cell_x, b * 5: b * 5 + 5] = torch.tensor(
+                        [x_center_cell, y_center_cell, width, height, 1])
+
+                converted_target[bi, cell_y, cell_x, B * 5 + label] = 1
 
         return target
 

@@ -51,6 +51,3 @@ class Darknet(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
-
-
-print(Darknet())

@@ -26,10 +26,13 @@ class Trainer:
         self.weights_path = weights_path
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        self.model = YOLOv1(self.config['grid_size'],
-                            self.config['num_bounding_boxes'],
-                            self.config['num_classes'],
-                            self.config['img_size'],
+        grid_size = self.config['grid_size'],
+        num_bounding_boxes = self.config['num_bounding_boxes'],
+        num_classes = self.config['num_classes'],
+
+        img_size = self.config['img_size']
+
+        self.model = YOLOv1(grid_size, num_bounding_boxes, num_classes, img_size,
                             pretrained_weights_path=pretrained_weights_path
                             ).to(self.device)
 
@@ -41,6 +44,8 @@ class Trainer:
         # Initialize the WarmUpScheduler
         self.scheduler = WarmUpScheduler(self.optimizer, warmup_epochs=self.config['warmup_epochs'],
                                          max_lr=self.config['learning_rate'])
+
+        self.criterion = YOLOv1Loss(grid_size, num_bounding_boxes, num_classes)
 
         self.train_loader, self.val_loader = get_loader(self.config, self.device)
         self.freeze_backbone_epoch = freeze_backbone_epoch
@@ -73,8 +78,7 @@ class Trainer:
             # Automatic mixed precision training
             with torch.cuda.amp.autocast(enabled=bool(self.scaler)):
                 outputs = self.model(images)
-                criterion = YOLOv1Loss(self.config)
-                loss = criterion(outputs, targets)
+                loss = self.criterion(outputs, targets)
 
             # Record loss
             self.writer.add_scalar('Loss/train', loss.item(), global_step=epoch)
