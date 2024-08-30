@@ -30,13 +30,14 @@ class YoloV1Loss(nn.Module):
             output = outputs[i]  # [S, S, B*5 + C]
             target = targets[i]
 
-            # Reshape output to [S, S, B, 5 + C] to separate bbox and class predictions
-            output = output.view(self.S, self.S, self.B, 5 + self.C)
+            # Reshape output to [S, S, B, 5] and [S, S, C] to separate bbox and class predictions
+            bbox_pred = output[..., :self.B * 5].view(self.S, self.S, self.B, 5)  # [S, S, B, 5]
+            class_pred = output[..., self.B * 5:]  # [S, S, C]
 
             # Extract elements
-            pred_boxes = output[..., :self.B * 4].contiguous().view(self.S, self.S, self.B, 4)  # [S, S, B, 4]
-            pred_conf = output[..., self.B * 4:self.B * 5].squeeze(-1)  # [S, S, B]
-            pred_cls = output[..., self.B * 5:]  # [S, S, C]
+            pred_boxes = bbox_pred[..., :4]  # [S, S, B, 4]
+            pred_conf = bbox_pred[..., 4]  # [S, S, B]
+            pred_cls = class_pred  # [S, S, C]
 
             # Convert predicted box coordinates to (x, y, w, h) format
             grid_x = torch.arange(self.S).repeat(self.S, 1).view(self.S, self.S, 1).to(self.device)
@@ -51,8 +52,6 @@ class YoloV1Loss(nn.Module):
             # Prepare target data
             target_boxes = target['boxes']  # [num_boxes, 4]
             target_labels = target['labels']  # [num_boxes]
-            # 将标签转换为one-hot格式
-            target_labels_one_hot = F.one_hot(target_labels, num_classes=self.C).float()  # [num_boxes, C]
 
             box_loss = 0
             class_loss = 0
@@ -62,7 +61,7 @@ class YoloV1Loss(nn.Module):
             # Create a mask for identifying cells with objects
             obj_mask = torch.zeros(self.S, self.S, self.B, dtype=torch.bool).to(self.device)
 
-            for target_box, target_label_one_hot in zip(target_boxes, target_labels_one_hot):
+            for target_box, target_label in zip(target_boxes, target_labels):
                 tx, ty, tw, th = target_box
 
                 # Convert box center (cx, cy) to grid coordinates
@@ -87,7 +86,7 @@ class YoloV1Loss(nn.Module):
                         torch.tensor([[pred_x, pred_y, pred_w, pred_h]]).to(self.device)
                     )
 
-                    if iou > best_iou:
+                    if iou >= best_iou:
                         best_iou = iou
                         best_box = pred_box
                         best_index = b
@@ -105,18 +104,22 @@ class YoloV1Loss(nn.Module):
                 box_loss += F.mse_loss(torch.sqrt(pred_w), torch.sqrt(tw)) + F.mse_loss(torch.sqrt(pred_h),
                                                                                         torch.sqrt(th))
 
-                # Calculate confidence loss for the best predictor
                 obj_loss += F.mse_loss(pred_conf[grid_y_idx, grid_x_idx, best_index],
                                        torch.tensor([1.0]).to(self.device))
 
-                # Calculate classification loss
-                class_loss += F.softmax(pred_cls[grid_y_idx, grid_x_idx], target_label_one_hot)
+                class_loss += self.mse_classification_loss(pred_cls[grid_y_idx, grid_x_idx], target_label)
 
-            # Calculate no-object confidence loss for other bounding boxes
-            # Calculate no-object confidence loss for bounding boxes without objects
+                obj_mask[grid_y_idx, grid_x_idx, best_index] = 1
+
             noobj_loss += F.mse_loss(pred_conf[~obj_mask], torch.zeros_like(pred_conf[~obj_mask]))
 
             total_loss += self.lambda_coord * box_loss + class_loss + obj_loss + self.lambda_noobj * noobj_loss
 
         total_loss /= N
         return total_loss
+
+    def mse_classification_loss(self, predictions, target):
+        pred_probs = F.softmax(predictions, dim=-1)  # [C]
+        target_probs = F.one_hot(target - 1, num_classes=self.C).float()  # [C]
+        mse_loss = torch.sum((pred_probs - target_probs) ** 2)
+        return mse_loss

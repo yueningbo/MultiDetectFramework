@@ -132,7 +132,7 @@ class YOLOv1(nn.Module):
             keep = nms(class_bboxes, class_scores, nms_thresh)
             all_bboxes.append(class_bboxes[keep])
             all_scores.append(class_scores[keep])
-            all_labels.extend([class_idx] * len(keep))
+            all_labels.extend([class_idx + 1] * len(keep))
 
         if len(all_bboxes) > 0:
             all_bboxes = torch.cat(all_bboxes, dim=0)

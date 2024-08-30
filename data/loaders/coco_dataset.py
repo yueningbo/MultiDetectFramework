@@ -50,7 +50,7 @@ class COCODataset(Dataset):
             labels.append(ann['category_id'])
 
         boxes = torch.tensor(boxes, dtype=torch.float32).view(-1, 4)
-        labels = torch.tensor(labels, dtype=torch.int8)
+        labels = torch.tensor(labels, dtype=torch.int64)
 
         if self.transform:
             image, boxes = self.transform(image, boxes)
