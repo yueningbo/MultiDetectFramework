@@ -8,42 +8,41 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def compute_iou(box1, box2):
+def compute_iou(pred_boxes, target_boxes):
     """
-    Compute Intersection over Union (IoU) between two bounding boxes.
+    计算预测框和目标框之间的IoU。
 
-    Parameters:
-    - box1: Tensor of shape (N, 4) with format [x_center, y_center, width, height]
-    - box2: Tensor of shape (M, 4) with format [x_center, y_center, width, height]
+    Args:
+        pred_boxes: (Tensor) 预测框，形状为 [B, 4]，其中 B 是预测框的数量。
+        target_boxes: (Tensor) 目标框，形状为 [1, 4]。
 
     Returns:
-    - Tensor of shape (N, M) representing IoU between each pair of boxes from box1 and box2.
+        iou: (Tensor) IoU 值，形状为 [B, 1]。
     """
-    box1_x1, box1_y1 = box1[:, 0] - box1[:, 2] / 2, box1[:, 1] - box1[:, 3] / 2
-    box1_x2, box1_y2 = box1[:, 0] + box1[:, 2] / 2, box1[:, 1] + box1[:, 3] / 2
-    box2_x1, box2_y1 = box2[:, 0] - box2[:, 2] / 2, box2[:, 1] - box2[:, 3] / 2
-    box2_x2, box2_y2 = box2[:, 0] + box2[:, 2] / 2, box2[:, 1] + box2[:, 3] / 2
+    # 计算交集的左上角和右下角坐标
+    inter_x1 = torch.max(pred_boxes[:, 0], target_boxes[:, 0])
+    inter_y1 = torch.max(pred_boxes[:, 1], target_boxes[:, 1])
+    inter_x2 = torch.min(pred_boxes[:, 2], target_boxes[:, 2])
+    inter_y2 = torch.min(pred_boxes[:, 3], target_boxes[:, 3])
 
-    # Compute intersection coordinates
-    inter_x1 = torch.max(box1_x1.unsqueeze(1), box2_x1.unsqueeze(0))
-    inter_y1 = torch.max(box1_y1.unsqueeze(1), box2_y1.unsqueeze(0))
-    inter_x2 = torch.min(box1_x2.unsqueeze(1), box2_x2.unsqueeze(0))
-    inter_y2 = torch.min(box1_y2.unsqueeze(1), box2_y2.unsqueeze(0))
+    # 计算交集的宽度和高度
+    inter_w = torch.clamp(inter_x2 - inter_x1, min=0)
+    inter_h = torch.clamp(inter_y2 - inter_y1, min=0)
 
-    # Compute intersection area
-    inter_width = torch.clamp(inter_x2 - inter_x1, min=0)
-    inter_height = torch.clamp(inter_y2 - inter_y1, min=0)
-    inter_area = inter_width * inter_height
+    # 计算交集面积
+    inter_area = inter_w * inter_h
 
-    # Compute areas of each box
-    box1_area = (box1_x2 - box1_x1) * (box1_y2 - box1_y1)
-    box2_area = (box2_x2 - box2_x1) * (box2_y2 - box2_y1)
+    # 计算预测框和目标框的面积
+    pred_area = (pred_boxes[:, 2] - pred_boxes[:, 0]) * (pred_boxes[:, 3] - pred_boxes[:, 1])
+    target_area = (target_boxes[:, 2] - target_boxes[:, 0]) * (target_boxes[:, 3] - target_boxes[:, 1])
 
-    # Compute IoU
-    union_area = box1_area.unsqueeze(1) + box2_area.unsqueeze(0) - inter_area
-    iou = inter_area / (union_area + 1e-6)  # Avoid division by zero
+    # 计算并集面积
+    union_area = pred_area + target_area - inter_area
 
-    return iou
+    # 计算IoU
+    iou = inter_area / union_area
+
+    return iou.unsqueeze(1)  # 返回形状为 [B, 1] 的IoU张量
 
 
 def print_model_flops(model, input_size, device):

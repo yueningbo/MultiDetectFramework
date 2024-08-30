@@ -17,17 +17,23 @@ class YOLOv1(nn.Module):
         self.fc = nn.Sequential(
             nn.Flatten(),
             nn.Linear(1024 * 7 * 7, 4096),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Linear(4096, 7 * 7 * (num_classes + 5 * B))
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 7 * 7 * (num_classes + 5 * B)),
+            nn.Sigmoid()
         )
 
-        self.num_classes = num_classes
+        self.S = 7  # Grid size
         self.B = B
+        self.C = num_classes  # Number of classes
+        self.img_orig_size = 448  # Original image size
+
+        self._initialize_weights()
 
     def forward(self, x):
         x = self.darknet(x)
         x = self.fc(x)
         x = x.view(-1, 7, 7, self.num_classes + 5 * self.B)
+
         return x
 
     def _initialize_weights(self):
@@ -63,8 +69,7 @@ class YOLOv1(nn.Module):
             Tensor: Decoded bounding boxes in image coordinates, shape [S, S, B, 4]
         """
         # Grid cell offsets, shape: [S, S, 1]
-        grid_x = torch.arange(grid_size).repeat(grid_size, 1).view([grid_size, grid_size, 1]).to(
-            bboxes.device)
+        grid_x = torch.arange(grid_size).repeat(grid_size, 1).view([grid_size, grid_size, 1]).to(bboxes.device)
         grid_y = grid_x.permute(1, 0, 2)
 
         # Decode bbox center
