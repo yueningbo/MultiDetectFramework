@@ -123,6 +123,7 @@ class Trainer:
                 self.unfreeze_backbone()
 
             self.train_epoch(epoch)
+            # self.evaluate()
 
             if (epoch + 1) % 5 == 0:
                 self.evaluate()

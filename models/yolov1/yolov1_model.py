@@ -104,8 +104,8 @@ class YOLOv1(nn.Module):
         根据得分获取预测的类别标签
         然后进行阈值筛选
         再按类别进行非极大值抑制
-        :param bboxes: 形状为[H, W, B]
-        :param scores: 形状为[H, W, C]
+        :param bboxes: 形状为[S, S, B, 4]
+        :param scores: 形状为[S, S, C]
         :param conf_thresh: 置信度阈值
         :param nms_thresh: 非极大值抑制阈值
         :return: bboxes, scores, labels
@@ -113,12 +113,15 @@ class YOLOv1(nn.Module):
         # Decode boxes from grid cell to image coordinates
         bboxes = self.decode_boxes(bboxes, self.S, self.img_orig_size)
 
-        bboxes = bboxes.view(-1, 4)  # Flatten to [N, 4]
+        bboxes = bboxes.view(-1, self.B, 4)  # Flatten to [N, B, 4]
         scores = scores.view(-1, self.C)  # Flatten to [N, C]
 
-        # Apply confidence threshold
-        conf_mask = scores.max(dim=-1)[0] > conf_thresh
-        bboxes, scores = bboxes[conf_mask], scores[conf_mask]
+        max_scores, _ = scores.max(dim=-1)
+        conf_mask = max_scores > conf_thresh
+        scores = scores[conf_mask]
+        bboxes = bboxes[conf_mask]
+
+        bboxes = bboxes.view(-1, 4)
 
         # Convert center format to corner format
         bboxes = center_to_corners(bboxes)
@@ -137,6 +140,9 @@ class YOLOv1(nn.Module):
         if len(all_bboxes) > 0:
             all_bboxes = torch.cat(all_bboxes, dim=0)
             all_scores = torch.cat(all_scores, dim=0)
+        else:
+            all_bboxes = torch.empty((0, 4), device=next(self.parameters()).device)
+            all_scores = torch.empty((0,), device=next(self.parameters()).device)
 
         return all_bboxes, all_scores, all_labels
 

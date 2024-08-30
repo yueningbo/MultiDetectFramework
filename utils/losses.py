@@ -44,6 +44,7 @@ class YoloV1Loss(nn.Module):
             grid_y = grid_x.permute(1, 0, 2)
             cell_size = 1.0 / self.S
 
+            pred_boxes = pred_boxes.clone()  # Avoid in-place operation
             pred_boxes[..., 0] = (pred_boxes[..., 0] + grid_x) * cell_size  # x_center
             pred_boxes[..., 1] = (pred_boxes[..., 1] + grid_y) * cell_size  # y_center
             pred_boxes[..., 2] = pred_boxes[..., 2]  # width
@@ -73,7 +74,7 @@ class YoloV1Loss(nn.Module):
                 offset_y = (ty - grid_y_idx * cell_size) / cell_size
 
                 # Find the best bounding box predictor (one with highest IoU)
-                best_iou = 0
+                best_iou = -1
                 best_box = None
                 best_index = 0
 
@@ -86,7 +87,7 @@ class YoloV1Loss(nn.Module):
                         torch.tensor([[pred_x, pred_y, pred_w, pred_h]]).to(self.device)
                     )
 
-                    if iou >= best_iou:
+                    if iou > best_iou:
                         best_iou = iou
                         best_box = pred_box
                         best_index = b
@@ -104,9 +105,9 @@ class YoloV1Loss(nn.Module):
                 box_loss += F.mse_loss(torch.sqrt(pred_w), torch.sqrt(tw)) + F.mse_loss(torch.sqrt(pred_h),
                                                                                         torch.sqrt(th))
 
-                obj_loss += F.mse_loss(pred_conf[grid_y_idx, grid_x_idx, best_index],
-                                       torch.tensor([1.0]).to(self.device))
+                obj_loss += F.mse_loss(pred_conf[grid_y_idx, grid_x_idx, best_index], torch.tensor(1.0).to(self.device))
 
+                # Calculate class loss
                 class_loss += self.mse_classification_loss(pred_cls[grid_y_idx, grid_x_idx], target_label)
 
                 obj_mask[grid_y_idx, grid_x_idx, best_index] = 1
