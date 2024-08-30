@@ -5,7 +5,6 @@ from torchvision.io import read_image
 from data.transforms.transform import YOLOv1Transform
 from utils.visualization import visualize_predictions
 from pycocotools.coco import COCO
-from torchvision.transforms.functional import to_tensor
 
 
 # 自定义 collate_fn 函数
@@ -51,7 +50,7 @@ class COCODataset(Dataset):
             labels.append(ann['category_id'])
 
         boxes = torch.tensor(boxes, dtype=torch.float32).view(-1, 4)
-        labels = torch.tensor(labels, dtype=torch.int64)
+        labels = torch.tensor(labels, dtype=torch.int8)
 
         if self.transform:
             image, boxes = self.transform(image, boxes)

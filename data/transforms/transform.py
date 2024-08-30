@@ -6,19 +6,6 @@ from torchvision.tv_tensors import BoundingBoxes
 from utils.visualization import visualize_prediction
 
 
-class PaddingToSquare:
-    def __call__(self, img, *args):
-        if args:
-            boxes = args[0]
-
-        C, H, W = img.shape
-        max_dim = max(H, W)
-        pad_height = max_dim - H if H < max_dim else 0
-        pad_width = max_dim - W if W < max_dim else 0
-
-        return v2.Pad((0, pad_width, 0, pad_height))
-
-
 class YOLOv1Transform:
     def __init__(self, size=(448, 448)):
         self.size = size
