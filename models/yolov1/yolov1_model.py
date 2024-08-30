@@ -3,52 +3,31 @@ import os
 
 import torch
 import torch.nn as nn
-import torchvision.models as models
 
+from models.yolov1.darknet import Darknet
 from utils.utils import center_to_corners, nms
 
 
 class YOLOv1(nn.Module):
-    def __init__(self, S=7, B=2, C=20, pretrained_weights_path=None, img_orig_size=448):
+    def __init__(self, num_classes=20, B=2):
         super().__init__()
-        self.S = S  # Grid size
-        self.B = B  # Number of bounding boxes
-        self.C = C  # Number of classes
-        self.img_orig_size = img_orig_size
 
-        # Load pretrained MobileNetV2 as the backbone
-        mobilenet_v2 = models.mobilenet_v2(pretrained=True)
+        self.darknet = Darknet()
 
-        # Use MobileNetV2 up to the penultimate layer
-        self.backbone = nn.Sequential(
-            *list(mobilenet_v2.features.children()),  # Keep all layers
-            nn.AdaptiveAvgPool2d((self.S, self.S))  # Adjust to SxS grid
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(1024 * 7 * 7, 4096),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Linear(4096, 7 * 7 * (num_classes + 5 * B))
         )
 
-        # Reduce the number of output channels to make it simpler
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(1280, 512, kernel_size=3, padding=1),  # Reducing output channels
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.1),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.1),
-            nn.Conv2d(512, (self.B * 5 + self.C), kernel_size=1),
-        )
-
-        if pretrained_weights_path:
-            self._load_pretrained_weights(pretrained_weights_path)
-        else:
-            logging.info('Model weights init.')
-            self._initialize_weights()
+        self.num_classes = num_classes
+        self.B = B
 
     def forward(self, x):
-        x = self.backbone(x)
-        x = self.conv_layers(x)
-
-        # [batch, C, H, W] -> [batch, H, W, C]
-        x = x.permute(0, 2, 3, 1).contiguous()
-
+        x = self.darknet(x)
+        x = self.fc(x)
+        x = x.view(-1, 7, 7, self.num_classes + 5 * self.B)
         return x
 
     def _initialize_weights(self):
@@ -104,18 +83,18 @@ class YOLOv1(nn.Module):
         根据得分获取预测的类别标签
         然后进行阈值筛选
         再按类别进行非极大值抑制
-        :param bboxes: 形状为[S, S, B, 4]
-        :param scores: 形状为[S, S, C]
+        :param bboxes: 形状为[H, W, B, 4]
+        :param scores: 形状为[H, W, C]
         :param conf_thresh: 置信度阈值
         :param nms_thresh: 非极大值抑制阈值
         :return: bboxes, scores, labels
         """
         # Decode boxes from grid cell to image coordinates
         bboxes = self.decode_boxes(bboxes, self.S, self.img_orig_size)
-
         bboxes = bboxes.view(-1, self.B, 4)  # Flatten to [N, B, 4]
         scores = scores.view(-1, self.C)  # Flatten to [N, C]
 
+        # Calculate confidence mask
         max_scores, _ = scores.max(dim=-1)
         conf_mask = max_scores > conf_thresh
         scores = scores[conf_mask]
@@ -163,8 +142,8 @@ class YOLOv1(nn.Module):
         bboxes, scores, labels = [], [], []
         for i in range(images.size(0)):
             output = outputs[i]  # [H, W, (B*5 + C)]
-            bboxes_i = output[..., :self.B * 4].view(self.S, self.S, self.B, 4)
-            scores_i = output[..., self.B * 5:]
+            scores_i = output[..., :self.C]
+            bboxes_i = output[..., self.C:].view(self.S, self.S, self.B, 4)
             bboxes_i, scores_i, labels_i = self.post_process(bboxes_i, scores_i, conf_thresh, nms_thresh)
             bboxes.append(bboxes_i)
             scores.append(scores_i)
