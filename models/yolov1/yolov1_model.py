@@ -104,22 +104,29 @@ class YOLOv1(nn.Module):
             # [S, S, B, 4], [S, S, B], [S, S, C]
             bboxes, confidences, class_probs = self._process_output(output)
 
-            confidences = confidences.unsqueeze(-1)  # (S, S, B, 1)
-            class_probs = class_probs.unsqueeze(2)  # (S, S, 1, C)
-            scores = confidences * class_probs  # (S, S, B, C)
+            scores = confidences.unsqueeze(-1) * class_probs.unsqueeze(2)  # (S, S, B, C)
 
-            scores, labels = torch.max(scores, dim=-1)  # [S, S, B]
+            _, labels = torch.max(scores, dim=-1)  # [S, S, B]
             mask = confidences > conf_threshold  # [S, S, B]
-            bboxes = bboxes[mask]  # 一维
-            scores = scores[mask]
-            labels = labels[mask]
+            bboxes = bboxes[mask]  # [N, 4]
+            scores = scores[mask]  # [N, C]
+            labels = labels[mask]  # [N,]
 
+            # apply nms
             bboxes = xywh_to_xyxy(bboxes)
-            keep = nms(bboxes, scores, nms_threshold)
+            keep = torch.zeros_like(labels)
+            for c in range(self.C):
+                class_score = scores[..., c]  # [N,]
+                print('---------------')
+                print(bboxes.shape)
+                print(class_score.shape)
+                c_keep = nms(bboxes, class_score, nms_threshold)
 
-            bboxes = bboxes[keep]
-            scores = scores[keep]
-            labels = labels[keep]
+                keep[c_keep] = 1
+
+            bboxes = bboxes[keep]  # [N, 4]
+            scores = scores[keep]  # [N, C]
+            labels = labels[keep]  # [N,]
 
             results.append((bboxes, scores, labels))
 

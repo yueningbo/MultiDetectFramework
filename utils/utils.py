@@ -107,7 +107,7 @@ def xywh_to_xyxy(boxes):
     return corners
 
 
-def nms(boxes, scores, iou_threshold):
+def nms(boxes: torch.Tensor, scores, iou_threshold):
     """
     执行非极大值抑制（NMS）。
 
@@ -119,29 +119,37 @@ def nms(boxes, scores, iou_threshold):
     返回:
     - keep: 一个包含应保留的框的索引的张量。
     """
-    indices = torch.argsort(scores, descending=True)
+    # Coordinates of bounding boxes
+    x1 = boxes[:, 0]
+    y1 = boxes[:, 1]
+    x2 = boxes[:, 2]
+    y2 = boxes[:, 3]
+
+    # Compute the area of the bounding boxes
+    areas = (x2 - x1 + 1) * (y2 - y1 + 1)
+    # Sort the bounding boxes by scores in descending order
+    _, order = scores.sort(0, descending=True)
     keep = []
 
-    while indices.numel() > 0:
-        current = indices[0]
-        keep.append(current.item())  # 将当前索引添加到保留列表中
-        if indices.numel() == 1:
-            break
+    while order.dim() > 0:
+        i = order[0]
+        keep.append(i)
 
-        # 计算 IoU
-        current_box = boxes[current].unsqueeze(0)
-        boxes_left = boxes[indices[1:]]
-        max_xy = torch.min(current_box[:, 2:], boxes_left[:, 2:])
-        min_xy = torch.max(current_box[:, :2], boxes_left[:, :2])
-        inter_wh = torch.clamp(max_xy - min_xy, min=0)
-        inter_area = inter_wh[:, 0] * inter_wh[:, 1]
-        current_area = (current_box[:, 2] - current_box[:, 0]) * (current_box[:, 3] - current_box[:, 1])
-        boxes_left_area = (boxes_left[:, 2] - boxes_left[:, 0]) * (boxes_left[:, 3] - boxes_left[:, 1])
-        union_area = current_area + boxes_left_area - inter_area
-        iou = inter_area / union_area
+        # Compute IoU of the kept box with the remaining boxes
+        xx1 = torch.max(x1[i], x1[order[1:]])
+        yy1 = torch.max(y1[i], y1[order[1:]])
+        xx2 = torch.min(x2[i], x2[order[1:]])
+        yy2 = torch.min(y2[i], y2[order[1:]])
 
-        # 保留 IoU 小于阈值的框
-        indices = indices[(iou < iou_threshold).nonzero(as_tuple=True)[0] + 1]  # 修正索引
+        w = (xx2 - xx1 + 1).clamp(min=0)
+        h = (yy2 - yy1 + 1).clamp(min=0)
+        inter = w * h
+
+        iou = inter / (areas[i] + areas[order[1:]] - inter)
+
+        # Keep only boxes with IoU less than the threshold
+        inds = (iou <= iou_threshold).nonzero(as_tuple=False).squeeze()
+        order = order[inds + 1]
 
     return torch.tensor(keep)
 
