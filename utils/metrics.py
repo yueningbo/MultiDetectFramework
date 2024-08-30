@@ -1,8 +1,6 @@
 import torch
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
-from utils.utils import nms
-from typing import List, Dict
 import logging
 
 
@@ -49,70 +47,27 @@ def evaluate_model(model: torch.nn.Module, test_loader, coco_annotation_file: st
         logging.warning("No predictions were generated during evaluation.")
 
 
-def convert_outputs_to_coco_format(output: List[List[float]], img_id: int) -> List[Dict]:
+def convert_outputs_to_coco_format(output, img_id):
     """
-    Convert model output to COCO format.
-
-    Args:
-        output (List[List[float]]): Model predictions for an image.
-        img_id (int): Image ID.
-
-    Returns:
-        List[Dict]: Predictions in COCO format.
-    """
-    coco_predictions = []
-    for detection in output:
-        x_min, y_min, width, height, class_id, score = detection
-        coco_pred = {
-            "image_id": img_id,
-            "category_id": int(class_id),
-            "bbox": [x_min, y_min, width, height],
-            "score": float(score)
-        }
-        coco_predictions.append(coco_pred)
-    return coco_predictions
-
-
-def apply_nms_per_class(predictions: List[Dict], nms_threshold: float) -> List[Dict]:
-    """
-    Apply Non-Maximum Suppression (NMS) per class and format the predictions.
+    Convert model output to COCO format for evaluation.
 
     Parameters:
-        predictions (List[Dict]): List of bounding boxes with scores.
-        nms_threshold (float): IoU threshold for NMS.
+        output (tuple): Output from model inference containing (bboxes, scores, labels).
+        img_id (int): Image ID corresponding to the output.
 
     Returns:
-        List[Dict]: List of predictions in COCO format after NMS.
+        list[dict]: List of predictions in COCO format.
     """
-    logging.debug("Applying NMS.")
-    if not predictions:
-        return []
+    bboxes, scores, labels = output
+    coco_predictions = []
+    for bbox, score, label in zip(bboxes, scores, labels):
+        x_min, y_min, width, height = bbox.tolist()
+        coco_prediction = {
+            "image_id": img_id,
+            "category_id": label,
+            "bbox": [x_min, y_min, width, height],
+            "score": score.item()
+        }
+        coco_predictions.append(coco_prediction)
 
-    # Group predictions by class
-    by_class = {}
-    for pred in predictions:
-        cls_id = pred['category_id']
-        if cls_id not in by_class:
-            by_class[cls_id] = {'boxes': [], 'scores': [], 'ids': []}
-        by_class[cls_id]['boxes'].append(pred['bbox'])
-        by_class[cls_id]['scores'].append(pred['score'])
-        by_class[cls_id]['ids'].append(pred['image_id'])
-
-    final_predictions = []
-    for cls_id, data in by_class.items():
-        boxes = torch.tensor(data['boxes'], dtype=torch.float32)
-        scores = torch.tensor(data['scores'], dtype=torch.float32)
-        keep = nms(boxes, scores, nms_threshold)
-
-        for idx in keep:
-            box = boxes[idx].tolist()
-            score = scores[idx].item()
-            final_predictions.append({
-                "image_id": data['ids'][idx],
-                "category_id": cls_id,
-                "bbox": box,
-                "score": score
-            })
-
-    logging.debug(f"NMS produced {len(final_predictions)} predictions.")
-    return final_predictions
+    return coco_predictions

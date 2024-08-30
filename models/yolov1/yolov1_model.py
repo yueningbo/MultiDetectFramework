@@ -71,6 +71,34 @@ class YOLOv1(nn.Module):
         else:
             logging.error(f"Pretrained weights file not found at {path}. Using initialized weights.")
 
+    def decode_boxes(self, bboxes, grid_size, img_size):
+        """
+        Decode the predicted bounding boxes from the grid cell coordinates to image coordinates.
+
+        Args:
+            bboxes (Tensor): Predicted bounding boxes in grid cell coordinates, shape [S, S, B, 4]
+            grid_size (int): The size of the grid (S)
+            img_size (int): The original image size
+
+        Returns:
+            Tensor: Decoded bounding boxes in image coordinates, shape [S, S, B, 4]
+        """
+        # Grid cell offsets, shape: [S, S, 1]
+        grid_x = torch.arange(grid_size).repeat(grid_size, 1).view([grid_size, grid_size, 1]).to(
+            bboxes.device)
+        grid_y = grid_x.permute(1, 0, 2)
+
+        # Decode bbox center
+        bx = (bboxes[..., 0] + grid_x) / grid_size * img_size
+        by = (bboxes[..., 1] + grid_y) / grid_size * img_size
+
+        # Decode bbox width and height (assuming they are predicted as sqrt(w) and sqrt(h))
+        bw = bboxes[..., 2] * img_size
+        bh = bboxes[..., 3] * img_size
+
+        decoded_bboxes = torch.stack([bx, by, bw, bh], dim=-1)
+        return decoded_bboxes
+
     def post_process(self, bboxes, scores, conf_thresh, nms_thresh):
         """
         根据得分获取预测的类别标签
@@ -82,6 +110,9 @@ class YOLOv1(nn.Module):
         :param nms_thresh: 非极大值抑制阈值
         :return: bboxes, scores, labels
         """
+        # Decode boxes from grid cell to image coordinates
+        bboxes = self.decode_boxes(bboxes, self.S, self.img_orig_size)
+
         bboxes = bboxes.view(-1, 4)  # Flatten to [N, 4]
         scores = scores.view(-1, self.C)  # Flatten to [N, C]
 
