@@ -14,8 +14,8 @@ class YOLOv1Loss(nn.Module):
         self.lambda_noobj = lambda_noobj
 
     def forward(self, pred, target):
-        converted_target = self.convert_to_yolo_format(target)
-        self.loss_compute(pred, converted_target)
+        converted_target = self.convert_to_yolo_format(target, pred.device)
+        return self.loss_compute(pred, converted_target)
 
     def loss_compute(self, pred, target):
         """ Compute loss for YOLO training.
@@ -106,7 +106,7 @@ class YOLOv1Loss(nn.Module):
 
         return loss
 
-    def convert_to_yolo_format(self, targets):
+    def convert_to_yolo_format(self, targets, device):
         """
         将目标框和标签转换为 YOLO 损失函数所需的格式。
 
@@ -122,13 +122,13 @@ class YOLOv1Loss(nn.Module):
 
         batch_size = len(targets)
 
-
-        print((batch_size, S, S, B * 5 + C))
-        converted_target = torch.zeros((batch_size, S, S, B * 5 + C))
+        converted_target = torch.zeros((batch_size, S, S, B * 5 + C), device=device)
 
         for bi in range(batch_size):
-            boxes = targets['boxes']
-            labels = targets['labels']
+            target = targets[bi]
+
+            boxes = target['boxes']
+            labels = target['labels']
             for box, label in zip(boxes, labels):
                 x_min, y_min, width, height = box
 
@@ -143,7 +143,7 @@ class YOLOv1Loss(nn.Module):
 
                 converted_target[bi, cell_y, cell_x, B * 5 + label] = 1
 
-        return target
+        return converted_target
 
 
 # 测试用例

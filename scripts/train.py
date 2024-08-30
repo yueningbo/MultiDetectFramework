@@ -21,14 +21,15 @@ class Trainer:
                  amp=False,
                  pretrained_weights_path=None,
                  freeze_backbone_epoch=20,
-                 summary_writer_path=None):
+                 summary_writer_path=None,
+                 heavy_eval=False):
         self.config = load_config(config_path)
         self.weights_path = weights_path
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        grid_size = self.config['grid_size'],
-        num_bounding_boxes = self.config['num_bounding_boxes'],
-        num_classes = self.config['num_classes'],
+        grid_size = self.config['grid_size']
+        num_bounding_boxes = self.config['num_bounding_boxes']
+        num_classes = self.config['num_classes']
 
         img_size = self.config['img_size']
 
@@ -50,6 +51,8 @@ class Trainer:
         self.train_loader, self.val_loader = get_loader(self.config, self.device)
         self.freeze_backbone_epoch = freeze_backbone_epoch
         self.writer = SummaryWriter(log_dir=summary_writer_path)
+
+        self.heavy_eval = heavy_eval
 
         logging.info(f'Configuration loaded from {config_path}')
         logging.info(f'Weights will be saved to {weights_path}')
@@ -127,9 +130,8 @@ class Trainer:
                 self.unfreeze_backbone()
 
             self.train_epoch(epoch)
-            # self.evaluate()
 
-            if (epoch + 1) % 5 == 0:
+            if self.heavy_eval or (epoch + 1) % 10 == 0:
                 self.evaluate()
 
             if (epoch + 1) % 10 == 0:
@@ -156,7 +158,8 @@ if __name__ == "__main__":
         config_path, weights_path, amp,
         summary_writer_path=summary_writer_path,
         # pretrained_weights_path=pretrained_weights_path,
-        freeze_backbone_epoch=freeze_backbone_epoch
+        freeze_backbone_epoch=freeze_backbone_epoch,
+        heavy_eval=True
     )
 
     trainer.train()

@@ -24,7 +24,7 @@ class YOLOv1(nn.Module):
             nn.Flatten(),
             nn.Linear(1024 * 7 * 7, 4096),
             nn.ReLU(inplace=True),
-            nn.Linear(4096, 7 * 7 * (num_classes + 5 * self.B)),
+            nn.Linear(4096, 7 * 7 * (5 * self.B + self.C)),
             nn.Sigmoid()
         )
 
