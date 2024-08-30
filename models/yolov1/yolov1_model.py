@@ -9,7 +9,12 @@ from utils.utils import center_to_corners, nms
 
 
 class YOLOv1(nn.Module):
-    def __init__(self, num_classes=20, B=2):
+    def __init__(self,
+                 grid_size=7,
+                 num_classes=20,
+                 num_bounding_boxes=2,
+                 img_orig_size=448,
+                 pretrained_weights_path=None):
         super().__init__()
 
         self.darknet = Darknet()
@@ -22,17 +27,20 @@ class YOLOv1(nn.Module):
             nn.Sigmoid()
         )
 
-        self.S = 7  # Grid size
-        self.B = B
+        self.S = grid_size  # Grid size
+        self.B = num_bounding_boxes  # bou
         self.C = num_classes  # Number of classes
-        self.img_orig_size = 448  # Original image size
+        self.img_orig_size = img_orig_size  # Original image size
 
-        self._initialize_weights()
+        if pretrained_weights_path:
+            self._load_pretrained_weights(pretrained_weights_path)
+        else:
+            self._initialize_weights()
 
     def forward(self, x):
         x = self.darknet(x)
         x = self.fc(x)
-        x = x.view(-1, 7, 7, self.num_classes + 5 * self.B)
+        x = x.view(-1, 7, 7, 5 * self.B + self.C)
 
         return x
 
@@ -137,8 +145,8 @@ class YOLOv1(nn.Module):
 
         Args:
             images (Tensor): 输入图像张量，形状为 [batch, H, W, C]
-            conf_threshold (float): 置信度阈值
-            nms_threshold (float): 非极大值抑制阈值
+            conf_thresh (float): 置信度阈值
+            nms_thresh (float): 非极大值抑制阈值
 
         Returns:
             list: [(bboxes, scores, labels),...]
@@ -146,8 +154,8 @@ class YOLOv1(nn.Module):
         outputs = self(images)
         bboxes, scores, labels = [], [], []
         for i in range(images.size(0)):
-            output = outputs[i]  # [H, W, (B*5 + C)]
-            scores_i = output[..., :self.C]
+            output = outputs[i]  # [H, W, (B * 5 + C)]
+            scores_i = output[..., :self.C]  # [H, W, (B*5 + C)]
             bboxes_i = output[..., self.C:].view(self.S, self.S, self.B, 4)
             bboxes_i, scores_i, labels_i = self.post_process(bboxes_i, scores_i, conf_thresh, nms_thresh)
             bboxes.append(bboxes_i)

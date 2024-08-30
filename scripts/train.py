@@ -1,10 +1,9 @@
-import json
 import os
 import torch
 import logging
 from torch.utils.tensorboard import SummaryWriter
 from data.loaders.dataset_loader import get_loader
-from utils.losses import YoloV1Loss
+from utils.losses import YOLOv1Loss
 from utils.metrics import evaluate_model
 from models.yolov1.yolov1_model import YOLOv1
 from utils.utils import print_model_flops, load_config
@@ -30,6 +29,7 @@ class Trainer:
         self.model = YOLOv1(self.config['grid_size'],
                             self.config['num_bounding_boxes'],
                             self.config['num_classes'],
+                            self.config['img_size'],
                             pretrained_weights_path=pretrained_weights_path
                             ).to(self.device)
 
@@ -73,7 +73,7 @@ class Trainer:
             # Automatic mixed precision training
             with torch.cuda.amp.autocast(enabled=bool(self.scaler)):
                 outputs = self.model(images)
-                criterion = YoloV1Loss(self.config, device=self.device)
+                criterion = YOLOv1Loss(self.config)
                 loss = criterion(outputs, targets)
 
             # Record loss

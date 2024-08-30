@@ -14,6 +14,11 @@ class YOLOv1Loss(nn.Module):
         self.lambda_noobj = lambda_noobj
 
     def forward(self, pred, target):
+        boxes, labels = target['boxes'], target['labels']
+        converted_target = self.convert_to_yolo_format(boxes, labels)
+        self.loss_compute(pred, converted_target)
+
+    def loss_compute(self, pred, target):
         """ Compute loss for YOLO training.
         Args:
             pred: (Tensor) predictions, sized [n_batch, S, S, Bx5+C], 5=len([x, y, w, h, conf]).
@@ -101,6 +106,38 @@ class YOLOv1Loss(nn.Module):
         loss = loss / float(batch_size)
 
         return loss
+
+    def convert_to_yolo_format(self, boxes, labels):
+        """
+        将目标框和标签转换为 YOLO 损失函数所需的格式。
+
+        Args:
+            boxes (Tensor): 边界框，形状为 [N, 4]，其中 N 是边界框的数量。
+            labels (Tensor): 标签，形状为 [N]。
+        Returns:
+            target (Tensor): 转换后的目标张量，形状为 [S, S, B * 5 + C]。
+        """
+        S = self.config['grid_size']
+        B = self.config['num_bounding_boxes']
+        C = self.config['num_classes']
+
+        target = torch.zeros((S, S, B * 5 + C))
+
+        for box, label in zip(boxes, labels):
+            x_min, y_min, width, height = box
+
+            cell_x = int(x_min * S)
+            cell_y = int(y_min * S)
+            x_center_cell = x_min * S - cell_x
+            y_center_cell = y_min * S - cell_y
+
+            for b in range(B):
+                target[cell_y, cell_x, b * 5: b * 5 + 5] = torch.tensor(
+                    [x_center_cell, y_center_cell, width, height, 1])
+
+            target[cell_y, cell_x, B * 5 + label] = 1
+
+        return target
 
 
 # 测试用例
