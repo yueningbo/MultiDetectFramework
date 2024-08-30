@@ -1,126 +1,112 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from utils.utils import compute_iou
+from torch.autograd import Variable
 
 
-class YoloV1Loss(nn.Module):
-    def __init__(self, config, lambda_coord=5, lambda_noobj=0.5, device=None):
-        super(YoloV1Loss, self).__init__()
-        self.S = config['grid_size']  # Grid size
-        self.B = config['num_bounding_boxes']  # Number of bounding boxes per grid cell
-        self.C = config['num_classes']  # Number of classes
-        self.lambda_coord = lambda_coord  # Weight for the localization loss
-        self.lambda_noobj = lambda_noobj  # Weight for the no-object confidence loss
-        self.device = device
+class YOLOv1Loss(nn.Module):
+    def __init__(self, S=7, B=2, C=20, lambda_coord=5, lambda_noobj=0.5):
+        super().__init__()
+        self.S = S  # Grid size
+        self.B = B  # Number of bounding boxes per cell
+        self.C = C  # Number of classes
+        self.lambda_coord = lambda_coord
+        self.lambda_noobj = lambda_noobj
 
-    def forward(self, outputs, targets):
+    def forward(self, pred, target):
+        """ Compute loss for YOLO training.
+        Args:
+            pred: (Tensor) predictions, sized [n_batch, S, S, Bx5+C], 5=len([x, y, w, h, conf]).
+            target: (Tensor) targets, sized [n_batch, S, S, Bx5+C].
+        Returns:
+            (Tensor): loss, sized [1, ].
         """
-        outputs.shape: [batch, S, S, B*5 + C]
-        targets: [{
-            'boxes': tensor([[x_center, y_center, width, height],...]),  # Normalized by image size
-            'labels': tensor([class_label,...])
-        },...]
-        """
-        N = outputs.size(0)
-        total_loss = 0
+        # TODO: Romove redundant dimensions for some Tensors.
 
-        for i in range(N):
-            output = outputs[i]  # [S, S, B*5 + C]
-            target = targets[i]
+        S, B, C = self.S, self.B, self.C
+        N = 5 * B + C  # 5=len([x, y, w, h, conf]
 
-            # Reshape output to [S, S, B, 5] and [S, S, C] to separate bbox and class predictions
-            bbox_pred = output[..., :self.B * 5].view(self.S, self.S, self.B, 5)  # [S, S, B, 5]
-            class_pred = output[..., self.B * 5:]  # [S, S, C]
+        batch_size = pred.size(0)
+        coord_mask = target[:, :, :, 4] > 0  # mask for the cells which contain objects. [n_batch, S, S]
+        noobj_mask = target[:, :, :, 4] == 0  # mask for the cells which do not contain objects. [n_batch, S, S]
+        coord_mask = coord_mask.unsqueeze(-1).expand_as(target)  # [n_batch, S, S] -> [n_batch, S, S, N]
+        noobj_mask = noobj_mask.unsqueeze(-1).expand_as(target)  # [n_batch, S, S] -> [n_batch, S, S, N]
 
-            # Extract elements
-            pred_boxes = bbox_pred[..., :4]  # [S, S, B, 4]
-            pred_conf = bbox_pred[..., 4]  # [S, S, B]
-            pred_cls = class_pred  # [S, S, C]
+        coord_pred = pred[coord_mask].view(-1, N)  # pred tensor on the cells which contain objects. [n_coord, N]
+        # n_coord: number of the cells which contain objects.
+        bbox_pred = coord_pred[:, :5 * B].contiguous().view(-1, 5)  # [n_coord x B, 5=len([x, y, w, h, conf])]
+        class_pred = coord_pred[:, 5 * B:]  # [n_coord, C]
 
-            # Convert predicted box coordinates to (x, y, w, h) format
-            grid_x = torch.arange(self.S).repeat(self.S, 1).view(self.S, self.S, 1).to(self.device)
-            grid_y = grid_x.permute(1, 0, 2)
-            cell_size = 1.0 / self.S
+        coord_target = target[coord_mask].view(-1, N)  # target tensor on the cells which contain objects. [n_coord, N]
+        # n_coord: number of the cells which contain objects.
+        bbox_target = coord_target[:, :5 * B].contiguous().view(-1, 5)  # [n_coord x B, 5=len([x, y, w, h, conf])]
+        class_target = coord_target[:, 5 * B:]  # [n_coord, C]
 
-            pred_boxes = pred_boxes.clone()  # Avoid in-place operation
-            pred_boxes[..., 0] = (pred_boxes[..., 0] + grid_x) * cell_size  # x_center
-            pred_boxes[..., 1] = (pred_boxes[..., 1] + grid_y) * cell_size  # y_center
-            pred_boxes[..., 2] = pred_boxes[..., 2]  # width
-            pred_boxes[..., 3] = pred_boxes[..., 3]  # height
+        # Compute loss for the cells with no object bbox.
+        noobj_pred = pred[noobj_mask].view(-1, N)  # pred tensor on the cells which do not contain objects. [n_noobj, N]
+        # n_noobj: number of the cells which do not contain objects.
+        noobj_target = target[noobj_mask].view(-1,
+                                               N)  # target tensor on the cells which do not contain objects. [n_noobj, N]
+        # n_noobj: number of the cells which do not contain objects.
+        noobj_conf_mask = torch.cuda.ByteTensor(noobj_pred.size()).fill_(0)  # [n_noobj, N]
+        for b in range(B):
+            noobj_conf_mask[:, 4 + b * 5] = 1  # noobj_conf_mask[:, 4] = 1; noobj_conf_mask[:, 9] = 1
+        noobj_pred_conf = noobj_pred[noobj_conf_mask]  # [n_noobj, 2=len([conf1, conf2])]
+        noobj_target_conf = noobj_target[noobj_conf_mask]  # [n_noobj, 2=len([conf1, conf2])]
+        loss_noobj = F.mse_loss(noobj_pred_conf, noobj_target_conf, reduction='sum')
 
-            # Prepare target data
-            target_boxes = target['boxes']  # [num_boxes, 4]
-            target_labels = target['labels']  # [num_boxes]
+        # Compute loss for the cells with objects.
+        coord_response_mask = torch.cuda.ByteTensor(bbox_target.size()).fill_(0)  # [n_coord x B, 5]
+        coord_not_response_mask = torch.cuda.ByteTensor(bbox_target.size()).fill_(1)  # [n_coord x B, 5]
+        bbox_target_iou = torch.zeros(bbox_target.size()).cuda()  # [n_coord x B, 5], only the last 1=(conf,) is used
 
-            box_loss = 0
-            class_loss = 0
-            noobj_loss = 0
-            obj_loss = 0
+        # Choose the predicted bbox having the highest IoU for each target bbox.
+        for i in range(0, bbox_target.size(0), B):
+            pred = bbox_pred[i:i + B]  # predicted bboxes at i-th cell, [B, 5=len([x, y, w, h, conf])]
+            pred_xyxy = Variable(torch.FloatTensor(pred.size()))  # [B, 5=len([x1, y1, x2, y2, conf])]
+            # Because (center_x,center_y)=pred[:, 2] and (w,h)=pred[:,2:4] are normalized for cell-size and image-size respectively,
+            # rescale (center_x,center_y) for the image-size to compute IoU correctly.
+            pred_xyxy[:, :2] = pred[:, :2] / float(S) - 0.5 * pred[:, 2:4]
+            pred_xyxy[:, 2:4] = pred[:, :2] / float(S) + 0.5 * pred[:, 2:4]
 
-            # Create a mask for identifying cells with objects
-            obj_mask = torch.zeros(self.S, self.S, self.B, dtype=torch.bool).to(self.device)
+            target = bbox_target[
+                i]  # target bbox at i-th cell. Because target boxes contained by each cell are identical in current implementation, enough to extract the first one.
+            target = bbox_target[i].view(-1, 5)  # target bbox at i-th cell, [1, 5=len([x, y, w, h, conf])]
+            target_xyxy = Variable(torch.FloatTensor(target.size()))  # [1, 5=len([x1, y1, x2, y2, conf])]
+            # Because (center_x,center_y)=target[:, 2] and (w,h)=target[:,2:4] are normalized for cell-size and image-size respectively,
+            # rescale (center_x,center_y) for the image-size to compute IoU correctly.
+            target_xyxy[:, :2] = target[:, :2] / float(S) - 0.5 * target[:, 2:4]
+            target_xyxy[:, 2:4] = target[:, :2] / float(S) + 0.5 * target[:, 2:4]
 
-            for target_box, target_label in zip(target_boxes, target_labels):
-                tx, ty, tw, th = target_box
+            iou = compute_iou(pred_xyxy[:, :4], target_xyxy[:, :4])  # [B, 1]
+            max_iou, max_index = iou.max(0)
+            max_index = max_index.data.cuda()
 
-                # Convert box center (cx, cy) to grid coordinates
-                grid_x_idx = int(tx / cell_size)
-                grid_y_idx = int(ty / cell_size)
+            coord_response_mask[i + max_index] = 1
+            coord_not_response_mask[i + max_index] = 0
 
-                # Calculate offset within the grid cell
-                offset_x = (tx - grid_x_idx * cell_size) / cell_size
-                offset_y = (ty - grid_y_idx * cell_size) / cell_size
+            # "we want the confidence score to equal the intersection over union (IOU) between the predicted box and the ground truth"
+            # from the original paper of YOLO.
+            bbox_target_iou[i + max_index, torch.LongTensor([4]).cuda()] = (max_iou).data.cuda()
+        bbox_target_iou = Variable(bbox_target_iou).cuda()
 
-                # Find the best bounding box predictor (one with highest IoU)
-                best_iou = -1
-                best_box = None
-                best_index = 0
+        # BBox location/size and objectness loss for the response bboxes.
+        bbox_pred_response = bbox_pred[coord_response_mask].view(-1, 5)  # [n_response, 5]
+        bbox_target_response = bbox_target[coord_response_mask].view(-1,
+                                                                     5)  # [n_response, 5], only the first 4=(x, y, w, h) are used
+        target_iou = bbox_target_iou[coord_response_mask].view(-1,
+                                                               5)  # [n_response, 5], only the last 1=(conf,) is used
+        loss_xy = F.mse_loss(bbox_pred_response[:, :2], bbox_target_response[:, :2], reduction='sum')
+        loss_wh = F.mse_loss(torch.sqrt(bbox_pred_response[:, 2:4]), torch.sqrt(bbox_target_response[:, 2:4]),
+                             reduction='sum')
+        loss_obj = F.mse_loss(bbox_pred_response[:, 4], target_iou[:, 4], reduction='sum')
 
-                for b in range(self.B):
-                    pred_box = pred_boxes[grid_y_idx, grid_x_idx, b]
-                    pred_x, pred_y, pred_w, pred_h = pred_box
+        # Class probability loss for the cells which contain objects.
+        loss_class = F.mse_loss(class_pred, class_target, reduction='sum')
 
-                    iou = compute_iou(
-                        torch.tensor([[tx, ty, tw, th]]).to(self.device),
-                        torch.tensor([[pred_x, pred_y, pred_w, pred_h]]).to(self.device)
-                    )
+        # Total loss
+        loss = self.lambda_coord * (loss_xy + loss_wh) + loss_obj + self.lambda_noobj * loss_noobj + loss_class
+        loss = loss / float(batch_size)
 
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_box = pred_box
-                        best_index = b
-
-                # Calculate box loss using the best predictor
-                pred_x, pred_y, pred_w, pred_h = best_box
-                box_loss += F.mse_loss(pred_x, offset_x) + F.mse_loss(pred_y, offset_y)
-
-                # 使用clamp来避免数值不稳定性
-                pred_w = torch.clamp(pred_w, min=1e-6)
-                pred_h = torch.clamp(pred_h, min=1e-6)
-                tw = torch.clamp(tw, min=1e-6)
-                th = torch.clamp(th, min=1e-6)
-
-                box_loss += F.mse_loss(torch.sqrt(pred_w), torch.sqrt(tw)) + F.mse_loss(torch.sqrt(pred_h),
-                                                                                        torch.sqrt(th))
-
-                obj_loss += F.mse_loss(pred_conf[grid_y_idx, grid_x_idx, best_index], torch.tensor(1.0).to(self.device))
-
-                # Calculate class loss
-                class_loss += self.mse_classification_loss(pred_cls[grid_y_idx, grid_x_idx], target_label)
-
-                obj_mask[grid_y_idx, grid_x_idx, best_index] = 1
-
-            noobj_loss += F.mse_loss(pred_conf[~obj_mask], torch.zeros_like(pred_conf[~obj_mask]))
-
-            total_loss += self.lambda_coord * box_loss + class_loss + obj_loss + self.lambda_noobj * noobj_loss
-
-        total_loss /= N
-        return total_loss
-
-    def mse_classification_loss(self, predictions, target):
-        pred_probs = F.softmax(predictions, dim=-1)  # [C]
-        target_probs = F.one_hot(target - 1, num_classes=self.C).float()  # [C]
-        mse_loss = torch.sum((pred_probs - target_probs) ** 2)
-        return mse_loss
+        return loss
