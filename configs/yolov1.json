@@ -1,6 +1,5 @@
 {
-  "num_classes": 2,
-  "num_bounding_boxes": 2,
+  "num_classes": 10,
   "grid_size": 7,
 
   "learning_rate": 0.005,
@@ -10,9 +9,10 @@
   "batch_size": 4,
   "warmup_epochs": 0,
 
-  "img_size": 448,
-  "img_dir": "data/datasets/VOCdevkit/VOC2007/JPEGImages",
-  "train_annotation_path": "data/datasets/VOCdevkit/VOC2007/train.json",
-  "val_annotation_path": "data/datasets/VOCdevkit/VOC2007/val.json",
-  "test_annotation_path": "data/datasets/VOCdevkit/VOC2007/test.json"
+  "img_size": 418,
+  "train_img_dir": "data/datasets/Mnist/mnist_train",
+  "val_img_dir": "data/datasets/Mnist/mnist_val",
+  "train_annotation_path": "data/datasets/Mnist/train.json",
+  "val_annotation_path": "data/datasets/Mnist/val.json",
+  "test_annotation_path": "data/datasets/Mnist/test.json"
 }

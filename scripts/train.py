@@ -11,7 +11,7 @@ from utils.utils import print_model_flops, load_config
 from utils.warmup_scheduler import WarmUpScheduler
 
 # 设置日志记录
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class Trainer:
@@ -28,12 +28,11 @@ class Trainer:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         grid_size = self.config['grid_size']
-        num_bounding_boxes = self.config['num_bounding_boxes']
         num_classes = self.config['num_classes']
 
         img_size = self.config['img_size']
 
-        self.model = YOLOv1(grid_size, num_bounding_boxes, num_classes, img_size,
+        self.model = YOLOv1(grid_size, num_classes, img_size,
                             pretrained_weights_path=pretrained_weights_path
                             ).to(self.device)
 
@@ -46,7 +45,7 @@ class Trainer:
         self.scheduler = WarmUpScheduler(self.optimizer, warmup_epochs=self.config['warmup_epochs'],
                                          max_lr=self.config['learning_rate'])
 
-        self.criterion = YOLOv1Loss(grid_size, num_bounding_boxes, num_classes)
+        self.criterion = YOLOv1Loss(grid_size, num_classes)
 
         self.train_loader, self.val_loader = get_loader(self.config, self.device)
         self.freeze_backbone_epoch = freeze_backbone_epoch
@@ -159,7 +158,7 @@ if __name__ == "__main__":
         summary_writer_path=summary_writer_path,
         # pretrained_weights_path=pretrained_weights_path,
         freeze_backbone_epoch=freeze_backbone_epoch,
-        heavy_eval=False
+        heavy_eval=True
     )
 
     trainer.train()

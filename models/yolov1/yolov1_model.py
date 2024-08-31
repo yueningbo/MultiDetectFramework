@@ -9,12 +9,11 @@ from utils.utils import nms, xywh_to_xyxy
 
 
 class YOLOv1(nn.Module):
-    def __init__(self, grid_size=7, num_bounding_boxes=2, num_classes=2, img_orig_size=448,
+    def __init__(self, grid_size=7, num_classes=2, img_orig_size=416,
                  pretrained_weights_path=None):
         super().__init__()
 
         self.S = grid_size  # Grid size
-        self.B = num_bounding_boxes  # Number of bounding boxes
         self.C = num_classes  # Number of classes
         self.img_orig_size = img_orig_size  # Original image size
 
@@ -22,9 +21,9 @@ class YOLOv1(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(1024 * 7 * 7, 4096),
+            nn.Linear(512 * 7 * 7, 2048),
             nn.ReLU(inplace=True),
-            nn.Linear(4096, 7 * 7 * (5 * self.B + self.C)),
+            nn.Linear(2048, 7 * 7 * (5 + self.C)),
             nn.Sigmoid()
         )
 
@@ -36,7 +35,7 @@ class YOLOv1(nn.Module):
     def forward(self, x):
         x = self.backbone(x)
         x = self.fc(x)
-        x = x.view(-1, 7, 7, 5 * self.B + self.C)
+        x = x.view(-1, 7, 7, 5 + self.C)
         return x
 
     def _initialize_weights(self):
@@ -61,28 +60,28 @@ class YOLOv1(nn.Module):
         else:
             logging.error(f"Pretrained weights file not found at {path}. Using initialized weights.")
 
-    def decode_boxes(self, bboxes, grid_size, img_size):
+    def decode_bboxes(self, bboxes, grid_size, img_size):
         """
         Decode the predicted bounding boxes from the grid cell coordinates to image coordinates.
 
         Args:
-            bboxes (Tensor): Predicted bounding boxes in grid cell coordinates, shape [S, S, B, 4]
+            bboxes (Tensor): Predicted bounding boxes in grid cell coordinates, shape [S, S, 4]
             grid_size (int): The size of the grid (S)
             img_size (int): The original image size
 
         Returns:
-            Tensor: Decoded bounding boxes in image coordinates, shape [S, S, B, 4]
+            Tensor: Decoded bounding boxes in image coordinates, shape [S, S, 4]
         """
-        grid_x = torch.arange(grid_size).repeat(grid_size, 1).view([grid_size, grid_size, 1]).to(bboxes.device)
-        grid_y = grid_x.permute(1, 0, 2)
+        grid_x = torch.arange(grid_size).repeat(grid_size).view([grid_size, grid_size]).to(bboxes.device)
+        grid_y = grid_x.permute(1, 0)
 
-        bx = (bboxes[..., 0] + grid_x) / grid_size * img_size
-        by = (bboxes[..., 1] + grid_y) / grid_size * img_size
-        bw = bboxes[..., 2] * img_size
-        bh = bboxes[..., 3] * img_size
+        n_bboxes = torch.zeros_like(bboxes)
+        n_bboxes[..., 0] = (bboxes[..., 0] + grid_x) / grid_size * img_size
+        n_bboxes[..., 1] = (bboxes[..., 1] + grid_y) / grid_size * img_size
+        n_bboxes[..., 2] = bboxes[..., 0] + bboxes[..., 2] * img_size
+        n_bboxes[..., 3] = bboxes[..., 1] + bboxes[..., 3] * img_size
 
-        decoded_bboxes = torch.stack([bx, by, bw, bh], dim=-1)
-        return decoded_bboxes
+        return n_bboxes
 
     @torch.no_grad()
     def inference(self, images, conf_threshold=0.5, nms_threshold=0.4):
@@ -105,21 +104,20 @@ class YOLOv1(nn.Module):
         for i in range(batch_size):
             output = outputs[i]
 
-            # [S, S, B, 4], [S, S, B], [S, S, B]
+            # [S, S, 4], [S, S], [S, S]
             bboxes, scores, labels = self._process_output(output)
 
             # 先过滤掉置信度不足的
-            mask = scores > conf_threshold  # [S, S, B]
+            mask = scores > conf_threshold  # [S, S]
             bboxes = bboxes[mask]  # [N, 4]
             scores = scores[mask]  # [N,]
             labels = labels[mask]  # [N,]
 
             # apply nms
-            bboxes_xyxy = xywh_to_xyxy(bboxes)
             keep = torch.zeros_like(labels, dtype=torch.bool)  # [N,]
             for c in range(self.C):
                 inds = torch.where(labels == c)[0]  # [N]
-                class_bboxes = bboxes_xyxy[inds]  # [CN, 4]
+                class_bboxes = bboxes[inds]  # [CN, 4]
                 class_score = scores[inds]  # [CN,]
                 keep_ind = nms(class_bboxes, class_score, nms_threshold)  # [CN,]
 
@@ -143,23 +141,22 @@ class YOLOv1(nn.Module):
         Returns:
             tuple: Processed bounding boxes, confidences, and class probabilities
         """
-        S, B = self.S, self.B
-        bboxes_output = output[..., :B * 5]  # [S, S, B*5]
-        class_probs = output[..., B * 5:]  # [S, S, C]
+        S = self.S
+        bboxes_output = output[..., :5]  # [S, S, 5]
+        class_probs = output[..., 5:]  # [S, S, C]
 
         # Reshape the output tensor to separate bounding boxes and class probabilities
-        bboxes_output = bboxes_output.view(S, S, B, 5)  # [S, S, B, 5]
+        bboxes_output = bboxes_output.view(S, S, 5)  # [S, S, 5]
 
         # Extract bounding boxes and confidences
         bboxes = bboxes_output[..., :4]
-        confidences = bboxes_output[..., 4]  # [S, S, B]
+        confidences = bboxes_output[..., 4]  # [S, S]
+        scores = confidences.unsqueeze(-1) * class_probs  # (S, S, C)
 
-        bboxes = self.decode_boxes(bboxes, self.S, self.img_orig_size)
-
-        scores = confidences.unsqueeze(-1) * class_probs.unsqueeze(2)  # (S, S, B, C)
+        bboxes = self.decode_bboxes(bboxes, self.S, self.img_orig_size)  # (S, S, 4)
 
         # Get max scores of each bbox
-        scores, labels = torch.max(scores, dim=-1)  # [S, S, B]
+        scores, labels = torch.max(scores, dim=-1)  # [S, S]
 
         return bboxes, scores, labels
 

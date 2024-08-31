@@ -29,7 +29,7 @@ def evaluate_model(model: torch.nn.Module, test_loader, coco_annotation_file: st
             all_predictions.extend(predictions)
 
     if all_predictions:
-        logging.info("All predictions generated. Loading ground truth annotations.")
+        logging.info(f"{len(all_predictions)} predictions generated. Loading ground truth annotations.")
         # Load ground truth and predictions
         coco_gt = COCO(coco_annotation_file)
         coco_dt = coco_gt.loadRes(all_predictions)
@@ -67,6 +67,7 @@ def convert_outputs_to_coco_format(output, img_id):
             "bbox": [x_min, y_min, width, height],
             "score": score.item()
         }
+        logging.debug(f'coco_prediction: {str(coco_prediction)}')
         coco_predictions.append(coco_prediction)
 
     return coco_predictions

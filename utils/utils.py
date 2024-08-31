@@ -10,11 +10,11 @@ def compute_iou(pred_boxes, target_boxes):
     计算预测框和目标框之间的IoU。
 
     Args:
-        pred_boxes: (Tensor) 预测框，形状为 [B, 4]，其中 B 是预测框的数量。
-        target_boxes: (Tensor) 目标框，形状为 [1, 4]。
+        pred_boxes: (Tensor) 预测框，形状为 [N, 4]，其中 N 是bbox的数量。
+        target_boxes: (Tensor) 目标框，形状为 [N, 4]。
 
     Returns:
-        iou: (Tensor) IoU 值，形状为 [B, 1]。
+        iou: (Tensor) IoU 值，形状为 [N,]。
     """
     # 计算交集的左上角和右下角坐标
     inter_x1 = torch.max(pred_boxes[:, 0], target_boxes[:, 0])
@@ -37,9 +37,9 @@ def compute_iou(pred_boxes, target_boxes):
     union_area = pred_area + target_area - inter_area
 
     # 计算IoU
-    iou = inter_area / union_area
+    iou = inter_area / (union_area + 1e-6)
 
-    return iou.unsqueeze(1)  # 返回形状为 [B, 1] 的IoU张量
+    return iou  # 返回形状为 [N,] 的IoU张量
 
 
 def print_model_flops(model, input_size, device):
@@ -100,7 +100,7 @@ def xywh_to_xyxy(boxes):
                 the bounding box in corner format [xmin, ymin, xmax, ymax].
     """
     # Compute corner coordinates directly using tensor operations
-    corners = torch.cat((boxes[:, :2], boxes[:, :2] + boxes[:, 2:]), dim=1)
+    corners = torch.cat((boxes[:, :2], boxes[:, :2] + boxes[:, 2:]), dim=2)
     return corners
 
 

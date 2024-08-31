@@ -54,7 +54,9 @@ def add_annotation(coco, annotation_id, image_id, category_id, bbox):
 
 def parse_xml_files(xml_path, txt_file_name, coco, category_set, image_set, txt_path, selected_categories=None):
     with open(os.path.join(txt_path, txt_file_name), 'r') as f:
-        img_ids_set = {line.split()[0] for line in f.readlines()}
+        lines = f.readlines()
+        print(lines)
+        img_ids_set = {line.split()[0] for line in lines if line.strip()}
 
     annotation_id = 0
     xml_files = os.listdir(xml_path)
@@ -146,13 +148,20 @@ def build_coco_annotations(xml_path, output_path, txt_file_name, txt_path, selec
 
 
 if __name__ == "__main__":
-    xml_path = 'data/datasets/VOCdevkit/VOC2007/Annotations'
-    image_path = 'data/dataset/VOCdevkit/voc2007/JPEGImages'
-    txt_path = 'data/datasets/VOCdevkit/VOC2007/ImageSets/Main'
-    txt_file_list = ['train.txt', 'test.txt', 'val.txt']
-    output_path = "data/datasets/VOCdevkit/VOC2007"
+    # xml_path = 'data/datasets/VOCdevkit/VOC2007/Annotations'
+    # image_path = 'data/dataset/VOCdevkit/voc2007/JPEGImages'
+    # txt_path = 'data/datasets/VOCdevkit/VOC2007/ImageSets/Main'
+    # txt_file_list = ['train.txt', 'test.txt', 'val.txt']
+    # output_path = "data/datasets/VOCdevkit/VOC2007"
 
-    selected_categories = ['dog', 'cat']  # 仅生成这些类别的注释
+    xml_path = 'data/datasets/Mnist/xml_val'
+    image_path = 'data/datasets/Mnist/mnist_val'
+    txt_path = 'data/datasets/Mnist'
+    txt_file_list = ['val.txt']
+    output_path = "data/datasets/Mnist"
+
+    # selected_categories = ['dog', 'cat', 'person']  # 仅生成这些类别的注释
+    selected_categories = [str(i) for i in range(10)]  # 仅生成这些类别的注释
 
     for txt_file in txt_file_list:
         output_json_path = os.path.join(output_path, txt_file.replace('txt', 'json'))

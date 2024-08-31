@@ -65,8 +65,10 @@ class COCODataset(Dataset):
 
 
 if __name__ == '__main__':
-    img_dir = 'data/datasets/VOCdevkit/VOC2007/JPEGImages'
-    annotation_dir = r'data/datasets/VOCdevkit/VOC2007/test.json'
+    # img_dir = 'data/datasets/VOCdevkit/VOC2007/JPEGImages'
+    # annotation_dir = r'data/datasets/VOCdevkit/VOC2007/test.json'
+    img_dir = 'data/datasets/Mnist/mnist_train'
+    annotation_dir = r'data/datasets/Mnist/train.json'
     transform = YOLOv1Transform()
     dataset = COCODataset(img_dir, annotation_dir, transform=transform)
     dataloader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=collate_fn)
