@@ -3,6 +3,7 @@ import os
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from models.yolov1.backbone import Darknet
 from utils.utils import nms, xywh_to_xyxy
@@ -101,32 +102,29 @@ class YOLOv1(nn.Module):
         for i in range(batch_size):
             output = outputs[i]
 
-            # [S, S, B, 4], [S, S, B], [S, S, C]
-            bboxes, confidences, class_probs = self._process_output(output)
+            # [S, S, B, 4], [S, S, B], [S, S, B]
+            bboxes, scores, labels = self._process_output(output)
 
-            scores = confidences.unsqueeze(-1) * class_probs.unsqueeze(2)  # (S, S, B, C)
-
-            _, labels = torch.max(scores, dim=-1)  # [S, S, B]
-            mask = confidences > conf_threshold  # [S, S, B]
+            # 先过滤掉置信度不足的
+            mask = scores > conf_threshold  # [S, S, B]
             bboxes = bboxes[mask]  # [N, 4]
-            scores = scores[mask]  # [N, C]
+            scores = scores[mask]  # [N,]
             labels = labels[mask]  # [N,]
 
             # apply nms
             bboxes = xywh_to_xyxy(bboxes)
-            keep = torch.zeros_like(labels)
+            keep = torch.zeros_like(labels)  # [N,]
             for c in range(self.C):
-                class_score = scores[..., c]  # [N,]
-                print('---------------')
-                print(bboxes.shape)
-                print(class_score.shape)
-                c_keep = nms(bboxes, class_score, nms_threshold)
+                label_mask = labels == c  # [N]
+                class_bboxes = bboxes[label_mask]  # [CN,]
+                class_score = scores[label_mask]  # [CN,]
+                c_keep = nms(class_bboxes, class_score, nms_threshold)  # [CN,]
 
                 keep[c_keep] = 1
 
             bboxes = bboxes[keep]  # [N, 4]
-            scores = scores[keep]  # [N, C]
             labels = labels[keep]  # [N,]
+            scores = scores[keep]  # [N,]
 
             results.append((bboxes, scores, labels))
 
@@ -154,5 +152,11 @@ class YOLOv1(nn.Module):
         confidences = bboxes_output[..., 4]  # [S, S, B]
 
         bboxes = self.decode_boxes(bboxes, self.S, self.img_orig_size)
+        class_probs = F.softmax(class_probs, dim=1)  # [S, S, C]
 
-        return bboxes, confidences, class_probs
+        scores = confidences.unsqueeze(-1) * class_probs.unsqueeze(2)  # (S, S, B, C)
+
+        # Get max scores of each bbox
+        scores, labels = torch.max(scores, dim=-1)  # [S, S, B]
+
+        return bboxes, scores, labels

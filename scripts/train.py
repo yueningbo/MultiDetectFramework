@@ -129,7 +129,7 @@ class Trainer:
             if epoch == self.freeze_backbone_epoch:
                 self.unfreeze_backbone()
 
-            # self.train_epoch(epoch)
+            self.train_epoch(epoch)
 
             if self.heavy_eval or (epoch + 1) % 10 == 0:
                 self.evaluate()
