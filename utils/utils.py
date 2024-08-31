@@ -4,9 +4,6 @@ import torch
 from thop import profile
 import logging
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 
 def compute_iou(pred_boxes, target_boxes):
     """

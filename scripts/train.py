@@ -152,14 +152,14 @@ if __name__ == "__main__":
     amp = True
     summary_writer_path = 'outputs/yolov1'
     pretrained_weights_path = 'outputs/yolov1/model_weights.pth_epoch_20.pth'
-    freeze_backbone_epoch = 20
+    freeze_backbone_epoch = 0
 
     trainer = Trainer(
         config_path, weights_path, amp,
         summary_writer_path=summary_writer_path,
         # pretrained_weights_path=pretrained_weights_path,
         freeze_backbone_epoch=freeze_backbone_epoch,
-        heavy_eval=True
+        heavy_eval=False
     )
 
     trainer.train()
