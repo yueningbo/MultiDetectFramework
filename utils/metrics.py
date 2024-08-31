@@ -63,7 +63,7 @@ def convert_outputs_to_coco_format(output, img_id):
         x_min, y_min, width, height = bbox.tolist()
         coco_prediction = {
             "image_id": img_id,
-            "category_id": label,
+            "category_id": label.item() + 1,
             "bbox": [x_min, y_min, width, height],
             "score": score.item()
         }

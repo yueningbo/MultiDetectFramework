@@ -3,7 +3,6 @@ import os
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from models.yolov1.backbone import Darknet
 from utils.utils import nms, xywh_to_xyxy
@@ -49,6 +48,10 @@ class YOLOv1(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
 
     def _load_pretrained_weights(self, path):
         if os.path.isfile(path):
@@ -112,15 +115,15 @@ class YOLOv1(nn.Module):
             labels = labels[mask]  # [N,]
 
             # apply nms
-            bboxes = xywh_to_xyxy(bboxes)
-            keep = torch.zeros_like(labels)  # [N,]
+            bboxes_xyxy = xywh_to_xyxy(bboxes)
+            keep = torch.zeros_like(labels, dtype=torch.bool)  # [N,]
             for c in range(self.C):
-                label_mask = labels == c  # [N]
-                class_bboxes = bboxes[label_mask]  # [CN,]
-                class_score = scores[label_mask]  # [CN,]
-                c_keep = nms(class_bboxes, class_score, nms_threshold)  # [CN,]
+                inds = torch.where(labels == c)[0]  # [N]
+                class_bboxes = bboxes_xyxy[inds]  # [CN, 4]
+                class_score = scores[inds]  # [CN,]
+                keep_ind = nms(class_bboxes, class_score, nms_threshold)  # [CN,]
 
-                keep[c_keep] = 1
+                keep[inds[keep_ind]] = True
 
             bboxes = bboxes[keep]  # [N, 4]
             labels = labels[keep]  # [N,]
@@ -152,7 +155,6 @@ class YOLOv1(nn.Module):
         confidences = bboxes_output[..., 4]  # [S, S, B]
 
         bboxes = self.decode_boxes(bboxes, self.S, self.img_orig_size)
-        class_probs = F.softmax(class_probs, dim=1)  # [S, S, C]
 
         scores = confidences.unsqueeze(-1) * class_probs.unsqueeze(2)  # (S, S, B, C)
 
@@ -160,3 +162,12 @@ class YOLOv1(nn.Module):
         scores, labels = torch.max(scores, dim=-1)  # [S, S, B]
 
         return bboxes, scores, labels
+
+
+if __name__ == '__main__':
+    from utils.losses import YOLOv1Loss
+
+    target = [{'boxes': torch.tensor([[0.1339, 0.4799, 0.4152, 0.2612]]), 'labels': [1]}]
+    c = YOLOv1Loss().convert_to_yolo_format(target, 'cpu')
+    r = YOLOv1().inference(c)
+    print(r)

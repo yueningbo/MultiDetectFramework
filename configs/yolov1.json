@@ -3,7 +3,7 @@
   "num_bounding_boxes": 2,
   "grid_size": 7,
 
-  "learning_rate": 0.001,
+  "learning_rate": 0.005,
   "decay": 0.0005,
   "momentum": 0.9,
   "epochs": 100,
